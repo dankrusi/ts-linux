@@ -4,7 +4,7 @@ type VirtualProcessState = any;
 type VirtualProcess = any;
 
 export const installPs: UnixCommandInstaller = (ctx): void => {
-  const { core, runtime, helpers } = ctx;
+  const { core, helpers } = ctx;
   const { makeSyscallSource, ANSI_RESET, ANSI_BOLD_GREEN, ANSI_BOLD_YELLOW, ANSI_DIM_RED, ANSI_BOLD_CYAN } = helpers;
 
   core({
@@ -13,11 +13,11 @@ export const installPs: UnixCommandInstaller = (ctx): void => {
         source: makeSyscallSource("ps", [
           "// runtime supports: ps, ps -ef"
         ]),
-        run: ({ args, sys, user, isTTY }) => {
+        run: ({ args, sys }) => {
           let showAll = false;
           let full = false;
           const colorize = (text: string, sgr: string): string => {
-            if (!isTTY) {
+            if (!sys.process.isTTY) {
               return text;
             }
             return `${sgr}${text}${ANSI_RESET}`;
@@ -55,8 +55,8 @@ export const installPs: UnixCommandInstaller = (ctx): void => {
             }
           }
   
-          const actor = runtime.getUser(user) ?? runtime.getActiveUser();
-          const rows = [...runtime.processes.values()]
+          const actor = sys.runtime.getUser(sys.process.user) ?? sys.runtime.getActiveUser();
+          const rows = [...sys.runtime.processes.values()]
             .filter((process) => {
               if (showAll) {
                 return true;

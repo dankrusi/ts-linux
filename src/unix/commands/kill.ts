@@ -1,7 +1,7 @@
 import type { UnixCommandInstaller } from "../types";
 
 export const installKill: UnixCommandInstaller = (ctx): void => {
-  const { core, runtime, helpers } = ctx;
+  const { core, helpers } = ctx;
   const { makeSyscallSource } = helpers;
 
   core({
@@ -10,7 +10,7 @@ export const installKill: UnixCommandInstaller = (ctx): void => {
         source: makeSyscallSource("kill", [
           "// runtime supports: kill [-SIGNAL] pid ..."
         ]),
-        run: ({ args, sys, user }) => {
+        run: ({ args, sys }) => {
           if (args.length === 0) {
             sys.write("kill: usage: kill [-s sigspec | -signum | -sigspec] pid");
             return;
@@ -52,7 +52,7 @@ export const installKill: UnixCommandInstaller = (ctx): void => {
             return;
           }
   
-          const actor = runtime.getUser(user) ?? runtime.getActiveUser();
+          const actor = sys.runtime.getUser(sys.process.user) ?? sys.runtime.getActiveUser();
           for (const rawPid of targets) {
             const pid = Number.parseInt(rawPid, 10);
             if (!Number.isFinite(pid) || pid <= 0) {
@@ -60,13 +60,13 @@ export const installKill: UnixCommandInstaller = (ctx): void => {
               continue;
             }
   
-            const process = runtime.processes.get(pid);
+            const process = sys.runtime.processes.get(pid);
             if (!process || process.state === "Z") {
               sys.write(`kill: (${pid}) - No such process`);
               continue;
             }
   
-            if (pid === 1 || (pid === runtime.shellPid && actor.uid !== 0)) {
+            if (pid === 1 || (pid === sys.runtime.shellPid && actor.uid !== 0)) {
               sys.write(`kill: (${pid}) - Operation not permitted`);
               continue;
             }

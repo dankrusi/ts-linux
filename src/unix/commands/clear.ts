@@ -8,7 +8,8 @@ export const installClear: UnixCommandInstaller = (ctx): void => {
         name: "clear",
         description: "clear terminal output",
         source: makeSyscallSource("clear", ["sys.clear();"]),
-        run: ({ sys }) => {
+        run: ({ args, sys }) => {
+          void args;
           sys.clear();
         }
       });

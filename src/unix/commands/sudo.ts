@@ -1,7 +1,7 @@
 import type { UnixCommandInstaller } from "../types";
 
 export const installSudo: UnixCommandInstaller = (ctx): void => {
-  const { core, runtime, helpers } = ctx;
+  const { core, helpers } = ctx;
   const { makeSyscallSource, enterInteractiveShell, verifyUserPassword } = helpers;
 
   core({
@@ -14,7 +14,7 @@ export const installSudo: UnixCommandInstaller = (ctx): void => {
           "// runtime implementation supports: sudo [-u user] [-s|-i] [-S] [--password pass] command",
           "if (command.length === 0) sys.write('sudo: missing command');"
         ]),
-        run: async ({ args, sys, stdin, isTTY }) => {
+        run: async ({ args, sys }) => {
           let targetName = "root";
           let password: string | undefined;
           let shellMode = false;
@@ -102,7 +102,7 @@ export const installSudo: UnixCommandInstaller = (ctx): void => {
             break;
           }
   
-          const actor = runtime.getActiveUser();
+          const actor = sys.runtime.getActiveUser();
           if (actor.uid !== 0) {
             if (!actor.sudo) {
               sys.write(`${actor.username} is not in the sudoers file. This incident will be reported.`);
@@ -111,7 +111,7 @@ export const installSudo: UnixCommandInstaller = (ctx): void => {
   
             let suppliedPassword = password;
             if (!suppliedPassword && readPasswordFromStdin) {
-              const stdinPassword = stdin.replace(/\r\n/g, "\n").split("\n")[0]?.trim() ?? "";
+              const stdinPassword = sys.process.stdin.replace(/\r\n/g, "\n").split("\n")[0]?.trim() ?? "";
               suppliedPassword = stdinPassword.length > 0 ? stdinPassword : undefined;
             }
   
@@ -127,7 +127,7 @@ export const installSudo: UnixCommandInstaller = (ctx): void => {
                 return;
               }
   
-              const entered = await runtime.bridge.readSecret(shownPrompt);
+              const entered = await sys.runtime.bridge.readSecret(shownPrompt);
               suppliedPassword = entered !== null ? entered : undefined;
               if (!suppliedPassword) {
                 sys.write("sudo: no password was provided");
@@ -143,12 +143,12 @@ export const installSudo: UnixCommandInstaller = (ctx): void => {
             }
           }
   
-          const target = runtime.getUser(targetName);
+          const target = sys.runtime.getUser(targetName);
           if (!target) {
             sys.write(`sudo: unknown user: ${targetName}`);
             return;
           }
-  
+
           if (shellMode && commandArgs.length === 0) {
             enterInteractiveShell({
               user: target,
@@ -156,7 +156,7 @@ export const installSudo: UnixCommandInstaller = (ctx): void => {
             });
             return;
           }
-  
+
           if (commandArgs.length === 0) {
             sys.write("usage: sudo [-u user] [-p password] command [args...]");
             return;
@@ -164,22 +164,22 @@ export const installSudo: UnixCommandInstaller = (ctx): void => {
   
           let originalCwd: string | null = null;
           if (loginShell) {
-            originalCwd = runtime.fs.pwd();
-            runtime.fs.mkdir(target.home);
-            runtime.fs.cd(target.home);
+            originalCwd = sys.runtime.fs.pwd();
+            sys.runtime.fs.mkdir(target.home);
+            sys.runtime.fs.cd(target.home);
           }
   
-          const ok = await runtime.runCommandByArgv(commandArgs, {
-            stdin,
+          const ok = await sys.runtime.runCommandByArgv(commandArgs, {
+            stdin: sys.process.stdin,
             stdout: (message = "") => {
               sys.write(message);
             },
             runAsUser: target,
-            isTTY
+            isTTY: sys.process.isTTY
           });
   
           if (loginShell && originalCwd !== null) {
-            runtime.fs.cd(originalCwd);
+            sys.runtime.fs.cd(originalCwd);
           }
   
           if (!ok) {

@@ -3,7 +3,7 @@ import type { UnixCommandInstaller } from "../types";
 type VNode = any;
 
 export const installLs: UnixCommandInstaller = (ctx): void => {
-  const { core, runtime, helpers } = ctx;
+  const { core, helpers } = ctx;
   const { makeSyscallSource, formatLsLongLine, colorizeLsName, usernameForUid } = helpers;
 
   core({
@@ -51,7 +51,7 @@ export const installLs: UnixCommandInstaller = (ctx): void => {
           "  }",
           "}",
         ]),
-        run: ({ args, sys, isTTY }) => {
+        run: ({ args, sys }) => {
           let showAll = false;
           let longFormat = false;
           let onePerLine = false;
@@ -152,7 +152,7 @@ export const installLs: UnixCommandInstaller = (ctx): void => {
   
           const listTargets = targets.length > 0 ? targets : ["."];
           const multipleTargets = listTargets.length > 1;
-          const colorizeOutput = colorMode === "always" || (colorMode === "auto" && isTTY);
+          const colorizeOutput = colorMode === "always" || (colorMode === "auto" && sys.process.isTTY);
   
           for (let index = 0; index < listTargets.length; index += 1) {
             const target = listTargets[index] ?? ".";
@@ -163,7 +163,7 @@ export const installLs: UnixCommandInstaller = (ctx): void => {
             }> = [];
   
             if (directoryAsEntry) {
-              const stat = runtime.fs.stat(target);
+              const stat = sys.runtime.fs.stat(target);
               if (!stat) {
                 sys.write(`ls: cannot access '${target}': no such file or directory`);
                 continue;
@@ -171,7 +171,7 @@ export const installLs: UnixCommandInstaller = (ctx): void => {
   
               let size = 4096;
               if (stat.kind === "file") {
-                const content = runtime.fs.readFile(target);
+                const content = sys.runtime.fs.readFile(target);
                 size = "error" in content ? 0 : content.content.length;
               }
   
@@ -186,7 +186,7 @@ export const installLs: UnixCommandInstaller = (ctx): void => {
                 size
               });
             } else {
-              const result = runtime.fs.list(target === "." ? undefined : target);
+              const result = sys.runtime.fs.list(target === "." ? undefined : target);
               if (result.error) {
                 sys.write(result.error);
                 continue;

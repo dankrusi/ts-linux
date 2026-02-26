@@ -1,7 +1,7 @@
 import type { UnixCommandInstaller } from "../types";
 
 export const installNetstat: UnixCommandInstaller = (ctx): void => {
-  const { core, runtime, helpers } = ctx;
+  const { core, helpers } = ctx;
   const { makeSyscallSource } = helpers;
 
   core({
@@ -75,7 +75,7 @@ export const installNetstat: UnixCommandInstaller = (ctx): void => {
               proto: "tcp",
               recvq: 0,
               sendq: 0,
-              local: numeric ? "10.0.2.15:47218" : `${runtime.host}:47218`,
+              local: numeric ? "10.0.2.15:47218" : `${sys.runtime.host}:47218`,
               foreign: numeric ? "93.184.216.34:443" : "example.com:https",
               state: "ESTABLISHED",
               program: "2/bash"

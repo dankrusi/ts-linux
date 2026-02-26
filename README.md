@@ -75,10 +75,10 @@ terminal.registerExecutable({
   name: "mycmd",
   path: "/usr/local/bin/mycmd",
   description: "my custom executable",
-  run: async ({ args, println, runTui }) => {
-    println(`args: ${args.join(", ")}`);
+  run: async ({ args, sys }) => {
+    sys.console.write(`args: ${args.join(", ")}`);
 
-    await runTui((ui) => {
+    await sys.tui.run((ui) => {
       ui.clear();
       ui.box(0, 0, ui.width, ui.height, "my app");
       ui.write(2, 2, "press q to quit");
@@ -92,3 +92,22 @@ terminal.registerExecutable({
   }
 });
 ```
+
+## Tool `run` contract
+
+All built-in tools and custom apps use a single signature:
+
+```ts
+run: async ({ args, sys }) => { ... }
+```
+
+Use `sys.*` namespaces for runtime APIs:
+
+- `sys.console` for output/input (`write`, `clear`, `readSecret`, `disconnect`)
+- `sys.fs` for virtual filesystem access
+- `sys.tui` for TUI execution
+- `sys.time` for clocks/sleep
+- `sys.process` for process-scoped values (`stdin`, `isTTY`, `user`, `host`, `cwd`)
+- `sys.exec`, `sys.runtime`, `sys.helpers` for advanced command/runtime integration
+
+Executable files are generated into the VFS from `run.toString()` during load. The generator applies a lightweight source formatter (including semicolon/newline normalization) before writing the file.

@@ -1,7 +1,7 @@
 import type { UnixCommandInstaller } from "../types";
 
 export const installBash: UnixCommandInstaller = (ctx): void => {
-  const { core, runtime, helpers } = ctx;
+  const { core, helpers } = ctx;
   const { makeSyscallSource, enterInteractiveShell, exitInteractiveShell } = helpers;
 
   core({
@@ -15,7 +15,7 @@ export const installBash: UnixCommandInstaller = (ctx): void => {
           "  // run command in child shell and exit",
           "}"
         ]),
-        run: async ({ args, sys, user }) => {
+        run: async ({ args, sys }) => {
           let loginShell = false;
           let commandText: string | null = null;
           let parsingOptions = true;
@@ -72,7 +72,7 @@ export const installBash: UnixCommandInstaller = (ctx): void => {
             return;
           }
   
-          const actor = runtime.getUser(user) ?? runtime.getActiveUser();
+          const actor = sys.runtime.getUser(sys.process.user) ?? sys.runtime.getActiveUser();
           const spawnedPid = enterInteractiveShell({
             user: actor,
             loginShell
@@ -83,9 +83,9 @@ export const installBash: UnixCommandInstaller = (ctx): void => {
           }
   
           try {
-            await runtime.execute(commandText);
+            await sys.runtime.execute(commandText);
           } finally {
-            if (runtime.shellPid === spawnedPid) {
+            if (sys.runtime.shellPid === spawnedPid) {
               exitInteractiveShell(0);
             }
           }

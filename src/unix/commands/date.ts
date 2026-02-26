@@ -8,8 +8,9 @@ export const installDate: UnixCommandInstaller = (ctx): void => {
         name: "date",
         description: "print current date/time",
         source: makeSyscallSource("date", ["sys.write(sys.now().toString());"]),
-        run: ({ println, sys }) => {
-          println(sys.now().toString());
+        run: ({ args, sys }) => {
+          void args;
+          sys.console.write(sys.now().toString());
         }
       });
 };

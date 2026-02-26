@@ -4,7 +4,7 @@ type TuiContext = any;
 type VirtualProcess = any;
 
 export const installTop: UnixCommandInstaller = (ctx): void => {
-  const { core, runtime, helpers } = ctx;
+  const { core, helpers } = ctx;
   const { makeSyscallSource, clamp, shellUptimeSeconds, formatDurationCompact } = helpers;
 
   core({
@@ -13,8 +13,9 @@ export const installTop: UnixCommandInstaller = (ctx): void => {
         source: makeSyscallSource("top", [
           "// runtime supports: top (q to quit)"
         ]),
-        run: async ({ runTui }) => {
-          await runTui((ui: TuiContext) => {
+        run: async ({ args, sys }) => {
+          void args;
+          await sys.tui.run((ui: TuiContext) => {
             let tick = 0;
             const formatProcTime = (process: VirtualProcess): string => {
               const end = process.endedAt ?? Date.now();
@@ -26,7 +27,7 @@ export const installTop: UnixCommandInstaller = (ctx): void => {
   
             const draw = (): void => {
               const uptime = formatDurationCompact(shellUptimeSeconds());
-              const processes = [...runtime.processes.values()].sort((a, b) => a.pid - b.pid);
+              const processes = [...sys.runtime.processes.values()].sort((a, b) => a.pid - b.pid);
               const running = processes.filter((process) => process.state === "R").length;
               const sleeping = processes.filter((process) => process.state === "S").length;
               const stopped = processes.filter((process) => process.state === "T").length;

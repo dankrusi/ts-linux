@@ -55,6 +55,11 @@ interface AnsiStyleState {
   bg?: string;
 }
 
+const MIN_TUI_COLS = 40;
+const MIN_TUI_ROWS = 12;
+const MAX_TUI_COLS = 120;
+const MAX_TUI_ROWS = 36;
+
 export interface BrowserTerminalOptions {
   resetFilesystem?: boolean;
   system?: Partial<ShellSystemConfig>;
@@ -151,6 +156,10 @@ export class BrowserTerminal implements ShellBridge {
     options?: RegisterExecutableOptions
   ): void {
     this.shell.registerExecutable(program, options);
+  }
+
+  public loadExecutablesIntoVfs(options?: { overwriteGeneratedSources?: boolean }): void {
+    this.shell.loadExecutablesIntoVfs(options);
   }
 
   public shouldSeedHostDefaults(): boolean {
@@ -1007,8 +1016,10 @@ export class BrowserTerminal implements ShellBridge {
   private getTuiSize(): { width: number; height: number } {
     const cellWidth = 8.2;
     const cellHeight = 17.2;
-    const width = Math.max(40, Math.floor(this.body.clientWidth / cellWidth) - 2);
-    const height = Math.max(12, Math.floor(this.body.clientHeight / cellHeight) - 1);
+    const rawWidth = Math.floor(this.body.clientWidth / cellWidth) - 2;
+    const rawHeight = Math.floor(this.body.clientHeight / cellHeight) - 1;
+    const width = Math.max(MIN_TUI_COLS, Math.min(MAX_TUI_COLS, rawWidth));
+    const height = Math.max(MIN_TUI_ROWS, Math.min(MAX_TUI_ROWS, rawHeight));
     return { width, height };
   }
 }

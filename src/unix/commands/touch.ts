@@ -17,11 +17,11 @@ export const installTouch: UnixCommandInstaller = (ctx): void => {
           "}",
           "if (paths.length === 0) { sys.write('touch: missing file operand'); return; }",
           "for (const path of paths) {",
-          "  const result = fs.touch(path, { noCreate });",
+          "  const result = sys.fs.touch(path, { noCreate });",
           "  if (!result.ok) sys.write(result.error);",
           "}"
         ]),
-        run: ({ args, sys, fs }) => {
+        run: ({ args, sys }) => {
           let noCreate = false;
           const targets: string[] = [];
           let parsingOptions = true;
@@ -61,7 +61,7 @@ export const installTouch: UnixCommandInstaller = (ctx): void => {
           }
   
           for (const target of targets) {
-            const result = fs.touch(target, { noCreate });
+            const result = sys.fs.touch(target, { noCreate });
             if (!result.ok) {
               sys.write(result.error);
             }

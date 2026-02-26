@@ -80,18 +80,19 @@ terminal.registerExecutable({
     "#!/usr/bin/env jlinux",
     "// hello executable",
     "export default async function main(ctx) {",
-    "  ctx.println('hello from source file');",
+    "  ctx.sys.console.write('hello from source file');",
     "}"
   ].join("\n"),
-  run: async ({ args, println, sleep }) => {
+  run: async ({ args, sys }) => {
     const name = args[0] ?? "developer";
-    println(`initializing custom command for ${name}...`);
-    await sleep(250);
-    println("hello from a dynamically registered program");
+    sys.console.write(`initializing custom command for ${name}...`);
+    await sys.time.sleep(250);
+    sys.console.write("hello from a dynamically registered program");
   }
 }, { materializeFile: shouldSeedHostDefaults });
 
 registerCustomApps(terminal, { materializeFile: shouldSeedHostDefaults });
+terminal.loadExecutablesIntoVfs();
 
 const boot = async (): Promise<void> => {
   await terminal.boot();

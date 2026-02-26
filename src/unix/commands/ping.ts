@@ -14,7 +14,7 @@ export const installPing: UnixCommandInstaller = (ctx): void => {
           "let target;",
           "// runtime implementation supports: ping [-c count] [-i interval] [-W timeout] host"
         ]),
-        run: async ({ args, sys, sleep }) => {
+        run: async ({ args, sys }) => {
           let count = 4;
           let intervalSeconds = 1;
           let timeoutSeconds = 2;
@@ -191,7 +191,7 @@ export const installPing: UnixCommandInstaller = (ctx): void => {
             }
   
             if (seq < count) {
-              await sleep(intervalMs);
+              await sys.time.sleep(intervalMs);
             }
           }
   

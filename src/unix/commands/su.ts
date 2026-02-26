@@ -1,7 +1,7 @@
 import type { UnixCommandInstaller } from "../types";
 
 export const installSu: UnixCommandInstaller = (ctx): void => {
-  const { core, runtime, helpers } = ctx;
+  const { core, helpers } = ctx;
   const { makeSyscallSource, tokenizeShellInput, enterInteractiveShell, verifyUserPassword } = helpers;
 
   core({
@@ -15,7 +15,7 @@ export const installSu: UnixCommandInstaller = (ctx): void => {
           "// runtime implementation supports: su [-|--login] [user] [-c 'cmd'] [--password pass]",
           "if (!target) sys.write('su: user not found');"
         ]),
-        run: async ({ args, sys, stdin, isTTY }) => {
+        run: async ({ args, sys }) => {
           let loginShell = false;
           let targetName = "root";
           let targetAssigned = false;
@@ -92,8 +92,8 @@ export const installSu: UnixCommandInstaller = (ctx): void => {
             }
           }
   
-          const actor = runtime.getActiveUser();
-          const target = runtime.getUser(targetName);
+          const actor = sys.runtime.getActiveUser();
+          const target = sys.runtime.getUser(targetName);
           if (!target) {
             sys.write(`su: user '${targetName}' does not exist`);
             return;
@@ -101,10 +101,10 @@ export const installSu: UnixCommandInstaller = (ctx): void => {
   
           const requiresPassword = actor.uid !== 0 && actor.username !== target.username;
           if (requiresPassword) {
-            const stdinPassword = stdin.replace(/\r\n/g, "\n").split("\n")[0]?.trim() ?? "";
+            const stdinPassword = sys.process.stdin.replace(/\r\n/g, "\n").split("\n")[0]?.trim() ?? "";
             let suppliedPassword = password ?? (stdinPassword.length > 0 ? stdinPassword : undefined);
             if (!suppliedPassword) {
-              const entered = await runtime.bridge.readSecret("Password: ");
+              const entered = await sys.runtime.bridge.readSecret("Password: ");
               suppliedPassword = entered !== null ? entered : undefined;
             }
             if (!suppliedPassword) {
@@ -122,22 +122,22 @@ export const installSu: UnixCommandInstaller = (ctx): void => {
           if (commandArgs.length > 0) {
             let originalCwd: string | null = null;
             if (loginShell) {
-              originalCwd = runtime.fs.pwd();
-              runtime.fs.mkdir(target.home);
-              runtime.fs.cd(target.home);
+              originalCwd = sys.runtime.fs.pwd();
+              sys.runtime.fs.mkdir(target.home);
+              sys.runtime.fs.cd(target.home);
             }
   
-            const ok = await runtime.runCommandByArgv(commandArgs, {
-              stdin,
+            const ok = await sys.runtime.runCommandByArgv(commandArgs, {
+              stdin: sys.process.stdin,
               stdout: (message = "") => {
                 sys.write(message);
               },
               runAsUser: target,
-              isTTY
+              isTTY: sys.process.isTTY
             });
   
             if (loginShell && originalCwd !== null) {
-              runtime.fs.cd(originalCwd);
+              sys.runtime.fs.cd(originalCwd);
             }
   
             if (!ok) {

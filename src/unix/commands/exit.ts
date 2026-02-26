@@ -1,7 +1,7 @@
 import type { UnixCommandInstaller } from "../types";
 
 export const installExit: UnixCommandInstaller = (ctx): void => {
-  const { core, runtime, helpers } = ctx;
+  const { core, helpers } = ctx;
   const { makeSyscallSource, exitInteractiveShell } = helpers;
 
   core({
@@ -35,7 +35,7 @@ export const installExit: UnixCommandInstaller = (ctx): void => {
           const exited = exitInteractiveShell(exitCode);
           if (!exited) {
             sys.write("logout");
-            runtime.bridge.disconnect(`Connection to ${runtime.host} closed.`);
+            sys.runtime.bridge.disconnect(`Connection to ${sys.runtime.host} closed.`);
           }
         }
       });

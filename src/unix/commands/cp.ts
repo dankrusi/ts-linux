@@ -21,7 +21,7 @@ export const installCp: UnixCommandInstaller = (ctx): void => {
           "if (paths.length < 2) { sys.write('cp: missing file operand'); return; }",
           "// full runtime implementation handles recursive directory copies and mode preservation"
         ]),
-        run: ({ args, sys, fs }) => {
+        run: ({ args, sys }) => {
           let recursive = false;
           let noClobber = false;
           let verbose = false;
@@ -94,9 +94,9 @@ export const installCp: UnixCommandInstaller = (ctx): void => {
   
           const destination = operands[operands.length - 1] ?? "";
           const sources = operands.slice(0, -1);
-          const destinationStat = fs.stat(destination);
+          const destinationStat = sys.fs.stat(destination);
           const destinationIsDirectory = destinationStat?.kind === "dir";
-          const destinationAbs = fs.toAbsolute(destination);
+          const destinationAbs = sys.fs.toAbsolute(destination);
   
           if (sources.length > 1 && !destinationIsDirectory) {
             sys.write(`cp: target '${destination}' is not a directory`);
@@ -104,7 +104,7 @@ export const installCp: UnixCommandInstaller = (ctx): void => {
           }
   
           const copyEntry = (sourceAbs: string, targetAbs: string): boolean => {
-            const sourceStat = fs.stat(sourceAbs);
+            const sourceStat = sys.fs.stat(sourceAbs);
             if (!sourceStat) {
               sys.write(`cp: cannot stat '${sourceAbs}': No such file or directory`);
               return false;
@@ -121,13 +121,13 @@ export const installCp: UnixCommandInstaller = (ctx): void => {
                 return false;
               }
   
-              const mkdirResult = fs.mkdir(targetAbs);
+              const mkdirResult = sys.fs.mkdir(targetAbs);
               if (!mkdirResult.ok) {
                 sys.write(`cp: cannot create directory '${targetAbs}': ${mkdirResult.error}`);
                 return false;
               }
   
-              const listing = fs.list(sourceAbs);
+              const listing = sys.fs.list(sourceAbs);
               if (listing.error) {
                 sys.write(listing.error.replace(/^ls:/, "cp:"));
                 return false;
@@ -149,22 +149,22 @@ export const installCp: UnixCommandInstaller = (ctx): void => {
             }
   
             let finalTarget = targetAbs;
-            const targetStat = fs.stat(finalTarget);
+            const targetStat = sys.fs.stat(finalTarget);
             if (targetStat?.kind === "dir") {
               finalTarget = joinPath(finalTarget, basename(sourceAbs));
             }
   
-            if (noClobber && fs.exists(finalTarget)) {
+            if (noClobber && sys.fs.exists(finalTarget)) {
               return true;
             }
   
-            const sourceFile = fs.readFile(sourceAbs);
+            const sourceFile = sys.fs.readFile(sourceAbs);
             if ("error" in sourceFile) {
               sys.write(sourceFile.error.replace(/^cat:/, "cp:"));
               return false;
             }
   
-            const writeResult = fs.writeFile(finalTarget, sourceFile.content, {
+            const writeResult = sys.fs.writeFile(finalTarget, sourceFile.content, {
               executable: Boolean(sourceStat.executable)
             });
             if (!writeResult.ok) {
@@ -180,8 +180,8 @@ export const installCp: UnixCommandInstaller = (ctx): void => {
   
           let hadError = false;
           for (const source of sources) {
-            const sourceAbs = fs.toAbsolute(source);
-            const sourceStat = fs.stat(sourceAbs);
+            const sourceAbs = sys.fs.toAbsolute(source);
+            const sourceStat = sys.fs.stat(sourceAbs);
   
             if (!sourceStat) {
               sys.write(`cp: cannot stat '${source}': No such file or directory`);
@@ -197,7 +197,7 @@ export const installCp: UnixCommandInstaller = (ctx): void => {
             if (
               sourceStat.kind === "dir" &&
               !destinationIsDirectory &&
-              fs.stat(destinationAbs)?.kind === "file"
+              sys.fs.stat(destinationAbs)?.kind === "file"
             ) {
               sys.write(
                 `cp: cannot overwrite non-directory '${destination}' with directory '${source}'`

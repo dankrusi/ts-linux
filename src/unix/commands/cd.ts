@@ -1,7 +1,7 @@
 import type { UnixCommandInstaller } from "../types";
 
 export const installCd: UnixCommandInstaller = (ctx): void => {
-  const { core, runtime, helpers } = ctx;
+  const { core, helpers } = ctx;
   const { makeSyscallSource } = helpers;
 
   core({
@@ -15,7 +15,7 @@ export const installCd: UnixCommandInstaller = (ctx): void => {
           "}"
         ]),
         run: ({ args, sys }) => {
-          const target = args[0] ?? runtime.getActiveUser().home;
+          const target = args[0] ?? sys.runtime.getActiveUser().home;
           const result = sys.cd(target);
           if (!result.ok) {
             sys.write(result.error);

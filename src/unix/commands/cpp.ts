@@ -1,7 +1,7 @@
 import type { UnixCommandInstaller } from "../types";
 
 export const installCpp: UnixCommandInstaller = (ctx): void => {
-  const { core, runtime, helpers } = ctx;
+  const { core, helpers } = ctx;
   const { makeSyscallSource } = helpers;
 
   core({
@@ -11,15 +11,15 @@ export const installCpp: UnixCommandInstaller = (ctx): void => {
           "const command = ['cp', ...args];",
           "// runtime forwards to cp with identical arguments"
         ]),
-        run: async ({ args, sys, stdin, user, isTTY }) => {
-          const actor = runtime.getUser(user) ?? runtime.getActiveUser();
-          await runtime.runCommandByArgv(["cp", ...args], {
-            stdin,
+        run: async ({ args, sys }) => {
+          const actor = sys.runtime.getUser(sys.process.user) ?? sys.runtime.getActiveUser();
+          await sys.runtime.runCommandByArgv(["cp", ...args], {
+            stdin: sys.process.stdin,
             stdout: (message = "") => {
               sys.write(message);
             },
             runAsUser: actor,
-            isTTY
+            isTTY: sys.process.isTTY
           });
         }
       });

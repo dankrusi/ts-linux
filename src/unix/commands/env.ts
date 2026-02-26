@@ -1,7 +1,7 @@
 import type { UnixCommandInstaller } from "../types";
 
 export const installEnv: UnixCommandInstaller = (ctx): void => {
-  const { core, runtime, helpers } = ctx;
+  const { core, helpers } = ctx;
   const { makeSyscallSource, currentEnvMap, isValidEnvName } = helpers;
 
   core({
@@ -11,7 +11,7 @@ export const installEnv: UnixCommandInstaller = (ctx): void => {
           "const entries = Object.entries(process.env || {});",
           "// runtime supports: env, env -u NAME, env NAME=VALUE ... [command]"
         ]),
-        run: async ({ args, sys, stdin, user, isTTY }) => {
+        run: async ({ args, sys }) => {
           const scoped = currentEnvMap();
           const applyUnset = (name: string): boolean => {
             if (!isValidEnvName(name)) {
@@ -96,21 +96,21 @@ export const installEnv: UnixCommandInstaller = (ctx): void => {
               return;
             }
   
-            const actor = runtime.getUser(user) ?? runtime.getActiveUser();
+            const actor = sys.runtime.getUser(sys.process.user) ?? sys.runtime.getActiveUser();
             const previous = currentEnvMap();
-            runtime.replaceEnvironment(scoped);
+            sys.runtime.replaceEnvironment(scoped);
             try {
-              await runtime.runCommandByArgv(commandArgs, {
-                stdin,
+              await sys.runtime.runCommandByArgv(commandArgs, {
+                stdin: sys.process.stdin,
                 stdout: (message = "") => {
                   sys.write(message);
                 },
                 runAsUser: actor,
-                isTTY
+                isTTY: sys.process.isTTY
               });
             } finally {
-              runtime.replaceEnvironment(previous);
-              runtime.syncEnvironmentForActiveUser();
+              sys.runtime.replaceEnvironment(previous);
+              sys.runtime.syncEnvironmentForActiveUser();
             }
             return;
           }

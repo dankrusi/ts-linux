@@ -8,8 +8,9 @@ export const installWhoami: UnixCommandInstaller = (ctx): void => {
         name: "whoami",
         description: "print current user",
         source: makeSyscallSource("whoami", ["sys.write(ctx.user);"]),
-        run: ({ user, println }) => {
-          println(user);
+        run: ({ args, sys }) => {
+          void args;
+          sys.console.write(sys.process.user);
         }
       });
 };

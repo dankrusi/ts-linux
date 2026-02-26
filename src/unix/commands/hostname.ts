@@ -1,7 +1,7 @@
 import type { UnixCommandInstaller } from "../types";
 
 export const installHostname: UnixCommandInstaller = (ctx): void => {
-  const { core, runtime, helpers } = ctx;
+  const { core, helpers } = ctx;
   const { makeSyscallSource } = helpers;
 
   core({
@@ -10,9 +10,9 @@ export const installHostname: UnixCommandInstaller = (ctx): void => {
         source: makeSyscallSource("hostname", [
           "// runtime supports: hostname, hostname newname"
         ]),
-        run: ({ args, sys, user }) => {
+        run: ({ args, sys }) => {
           if (args.length === 0 || args[0] === "-s" || args[0] === "--short" || args[0] === "-f" || args[0] === "--fqdn") {
-            sys.write(runtime.host);
+            sys.write(sys.runtime.host);
             return;
           }
   
@@ -21,7 +21,7 @@ export const installHostname: UnixCommandInstaller = (ctx): void => {
             return;
           }
   
-          const actor = runtime.getUser(user) ?? runtime.getActiveUser();
+          const actor = sys.runtime.getUser(sys.process.user) ?? sys.runtime.getActiveUser();
           if (actor.uid !== 0) {
             sys.write("hostname: you must be root to change the host name");
             return;
@@ -33,8 +33,8 @@ export const installHostname: UnixCommandInstaller = (ctx): void => {
             return;
           }
   
-          runtime.host = next;
-          runtime.envVars.set("HOSTNAME", next);
+          sys.runtime.host = next;
+          sys.runtime.envVars.set("HOSTNAME", next);
         }
       });
 };

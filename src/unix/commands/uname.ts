@@ -1,7 +1,7 @@
 import type { UnixCommandInstaller } from "../types";
 
 export const installUname: UnixCommandInstaller = (ctx): void => {
-  const { core, runtime, helpers } = ctx;
+  const { core, helpers } = ctx;
   const { makeSyscallSource } = helpers;
 
   core({
@@ -9,12 +9,12 @@ export const installUname: UnixCommandInstaller = (ctx): void => {
         description: "print system info",
         source: makeSyscallSource("uname", [
           "const fields = {",
-          `  s: '${runtime.system.kernelName}',`,
+          "  s: 'Linux',",
           "  n: ctx.host,",
-          `  r: '${runtime.system.kernelRelease}',`,
-          `  v: '${runtime.system.kernelVersion}',`,
-          `  m: '${runtime.system.machine}',`,
-          `  o: '${runtime.system.operatingSystem}'`,
+          "  r: '0.0',",
+          "  v: 'runtime',",
+          "  m: 'x86_64',",
+          "  o: 'GNU/Linux'",
           "};",
           "const selected = args.length === 0 ? ['s'] : args;",
           "if (selected.includes('-a')) {",
@@ -26,23 +26,23 @@ export const installUname: UnixCommandInstaller = (ctx): void => {
           "if (out.length === 0) { sys.write(`uname: invalid option: ${selected[0]}`); return; }",
           "sys.write(out.join(' '));"
         ]),
-        run: ({ args, println, host }) => {
+        run: ({ args, sys }) => {
           const fields = {
-            s: runtime.system.kernelName,
-            n: host,
-            r: runtime.system.kernelRelease,
-            v: runtime.system.kernelVersion,
-            m: runtime.system.machine,
-            o: runtime.system.operatingSystem
+            s: sys.runtime.system.kernelName,
+            n: sys.process.host,
+            r: sys.runtime.system.kernelRelease,
+            v: sys.runtime.system.kernelVersion,
+            m: sys.runtime.system.machine,
+            o: sys.runtime.system.operatingSystem
           } as const;
   
           if (args.length === 0) {
-            println(fields.s);
+            sys.console.write(fields.s);
             return;
           }
   
           if (args.includes("-a") || args.includes("--all")) {
-            println(`${fields.s} ${fields.n} ${fields.r} ${fields.v} ${fields.m} ${fields.o}`);
+            sys.console.write(`${fields.s} ${fields.n} ${fields.r} ${fields.v} ${fields.m} ${fields.o}`);
             return;
           }
   
@@ -72,11 +72,11 @@ export const installUname: UnixCommandInstaller = (ctx): void => {
               values.push(fields.o);
               continue;
             }
-            println(`uname: invalid option: ${arg}`);
+            sys.console.write(`uname: invalid option: ${arg}`);
             return;
           }
   
-          println(values.join(" "));
+          sys.console.write(values.join(" "));
         }
       });
 };

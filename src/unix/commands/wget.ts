@@ -10,7 +10,7 @@ export const installWget: UnixCommandInstaller = (ctx): void => {
         source: makeSyscallSource("wget", [
           "// runtime supports: wget [-q] [-O file] URL"
         ]),
-        run: async ({ args, sys, fs }) => {
+        run: async ({ args, sys }) => {
           let target: string | undefined;
           let outputPath: string | undefined;
           let quiet = false;
@@ -92,14 +92,14 @@ export const installWget: UnixCommandInstaller = (ctx): void => {
             return;
           }
   
-          const resolved = resolveCurlTarget(target, fs);
+          const resolved = resolveCurlTarget(target, sys.fs);
           if ("error" in resolved) {
             sys.write(resolved.error.replace(/^curl:/, "wget:"));
             return;
           }
   
           if (resolved.kind === "virtual-file") {
-            const fileResult = fs.readFile(resolved.path);
+            const fileResult = sys.fs.readFile(resolved.path);
             if ("error" in fileResult) {
               sys.write(fileResult.error.replace(/^cat:/, "wget:"));
               return;
@@ -111,7 +111,7 @@ export const installWget: UnixCommandInstaller = (ctx): void => {
               return;
             }
             const destination = outputPath ?? basename(resolved.path);
-            const writeResult = fs.writeFile(destination, fileResult.content);
+            const writeResult = sys.fs.writeFile(destination, fileResult.content);
             if (!writeResult.ok) {
               sys.write(writeResult.error);
               return;
@@ -178,7 +178,7 @@ export const installWget: UnixCommandInstaller = (ctx): void => {
   
           const body = await response.text();
           const destination = outputPath ?? filenameFromUrl(targetUrl);
-          const writeResult = fs.writeFile(destination, body);
+          const writeResult = sys.fs.writeFile(destination, body);
           if (!writeResult.ok) {
             sys.write(writeResult.error);
             return;

@@ -11,6 +11,7 @@ const OPERATOR_GID = 1001;
 const SHELL_STORAGE_KEY = "jlinux:shell-state:v1";
 const SHELL_STATE_VERSION = 1;
 const DEFAULT_EXECUTABLE_SHEBANG = "#!/usr/bin/env jlinux";
+const RUNTIME_SOURCE_MARKER = "// @generated-by:jlinux-runtime";
 
 const delay = (ms: number): Promise<void> => {
   return new Promise((resolve) => {
@@ -20,6 +21,22 @@ const delay = (ms: number): Promise<void> => {
 
 const clamp = (value: number, min: number, max: number): number => {
   return Math.max(min, Math.min(max, value));
+};
+
+const HELPER_SPINNER_FRAMES = ["|", "/", "-", "\\"] as const;
+const HELPER_SPARK_CHARS = ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"] as const;
+
+const helperSparkline = (values: number[]): string => {
+  return values
+    .map((value) => {
+      const index = clamp(
+        Math.round(value * (HELPER_SPARK_CHARS.length - 1)),
+        0,
+        HELPER_SPARK_CHARS.length - 1
+      );
+      return HELPER_SPARK_CHARS[index] ?? HELPER_SPARK_CHARS[0];
+    })
+    .join("");
 };
 
 const makeSyscallSource = (name: string, bodyLines: string[]): string => {
@@ -369,6 +386,7 @@ const verifyVirtualPassword = async (password: string, storedHash: string): Prom
 };
 
 interface Syscalls {
+  // Legacy flat syscall surface.
   pwd(): string;
   cd(path: string): { ok: true } | { ok: false; error: string };
   ls(path?: string): ReturnType<VirtualFS["list"]>;
@@ -377,18 +395,59 @@ interface Syscalls {
   clear(): void;
   which(command: string): { path: string } | { error: string };
   listExecutables(): Array<{ name: string; path: string; description: string }>;
+  invokeRuntimeExecutable(path: string, context: ProgramContext): Promise<void>;
   now(): Date;
+  // Namespaced runtime APIs.
+  console: {
+    write(message?: string): void;
+    clear(): void;
+    readSecret(prompt: string): Promise<string | null>;
+    disconnect(message?: string): void;
+  };
+  fs: VirtualFS;
+  process: {
+    stdin: string;
+    isTTY: boolean;
+    user: string;
+    host: string;
+    cwd: string;
+  };
+  time: {
+    now(): Date;
+    sleep(ms: number): Promise<void>;
+  };
+  tui: {
+    run(program: TuiProgram): Promise<void>;
+  };
+  exec: {
+    which(command: string): { path: string } | { error: string };
+    resolveAll(command: string): string[];
+    listExecutables(): Array<{ name: string; path: string; description: string }>;
+    runArgv(
+      argv: string[],
+      options?: {
+        stdin?: string;
+        stdout?: (message?: string) => void;
+        runAsUser?: VirtualUser;
+        isTTY?: boolean;
+      }
+    ): Promise<boolean>;
+    runLine(line: string): Promise<void>;
+  };
+  runtime: any;
+  helpers: Record<string, unknown>;
 }
 
 export interface ProgramContext {
   args: string[];
+  sys: Syscalls;
+  // Legacy context aliases retained for compatibility.
   stdin: string;
   isTTY: boolean;
   fs: VirtualFS;
   cwd: string;
   user: string;
   host: string;
-  sys: Syscalls;
   println(message?: string): void;
   clear(): void;
   runTui(program: TuiProgram): Promise<void>;
@@ -947,6 +1006,7 @@ const filenameFromUrl = (rawUrl: string): string => {
 export class Shell {
   private readonly fs = new VirtualFS(HOME_PATH);
   private readonly executables = new Map<string, ProgramDefinition>();
+  private readonly sourceProgramCache = new Map<string, { source: string; program: ProgramDefinition }>();
   private readonly users = new Map<string, VirtualUser>();
   private readonly pathDirs = ["/bin", "/usr/bin", "/usr/local/bin"];
   private readonly system: ShellSystemConfig;
@@ -987,7 +1047,8 @@ export class Shell {
       }
 
       this.seedVirtualUsers({ ensureHomeDirectories: !restored });
-      this.installCoreExecutables(!restored);
+      this.installCoreExecutables(false);
+      this.loadExecutablesIntoVfs({ overwriteGeneratedSources: !restored });
     });
 
     this.initializeRuntimeState();
@@ -1033,27 +1094,37 @@ export class Shell {
 
     this.withUserFsCredentials(this.getRootUser(), () => {
       const absolutePath = this.fs.toAbsolute(program.path);
-      if (materializeFile) {
-        const source =
-          program.source ??
-          [
-            DEFAULT_EXECUTABLE_SHEBANG,
-            `// ${program.name}`,
-            `// ${program.description}`,
-            "export default async function main(ctx) {}"
-          ].join("\n");
+      this.executables.set(absolutePath, {
+        name: this.commandNameFromPath(absolutePath),
+        description: program.description,
+        showInHelp: program.showInHelp,
+        run: program.run
+      });
+      this.sourceProgramCache.delete(absolutePath);
 
-        const writeResult = this.fs.writeFile(absolutePath, source, { executable: true });
+      if (materializeFile) {
+        const writeResult = this.materializeExecutableIntoVfs(absolutePath, {
+          overwriteGeneratedSource: true
+        });
         if (!writeResult.ok) {
           throw new Error(writeResult.error);
         }
       }
+    });
+  }
 
-      this.executables.set(absolutePath, {
-        name: this.commandNameFromPath(absolutePath),
-        description: program.description,
-        run: program.run
-      });
+  public loadExecutablesIntoVfs(options?: { overwriteGeneratedSources?: boolean }): void {
+    const overwriteGeneratedSources = options?.overwriteGeneratedSources ?? false;
+
+    this.withUserFsCredentials(this.getRootUser(), () => {
+      for (const path of this.executables.keys()) {
+        const writeResult = this.materializeExecutableIntoVfs(path, {
+          overwriteGeneratedSource: overwriteGeneratedSources
+        });
+        if (!writeResult.ok) {
+          throw new Error(writeResult.error);
+        }
+      }
     });
   }
 
@@ -1062,6 +1133,260 @@ export class Shell {
       ...program,
       path: `/usr/local/bin/${program.name}`
     }, options);
+  }
+
+  private materializeExecutableIntoVfs(
+    path: string,
+    options?: { overwriteGeneratedSource?: boolean }
+  ): FsResult {
+    const program = this.executables.get(path) ?? this.rehydrateRuntimeProgram(path);
+    if (!program) {
+      return { ok: false, error: `load: missing runtime executable for ${path}` };
+    }
+
+    const desiredSource = this.buildRuntimeExecutableSource(path, program);
+    const stat = this.fs.stat(path);
+
+    if (stat?.kind === "dir") {
+      return { ok: false, error: `write: ${path}: Is a directory` };
+    }
+
+    if (stat?.kind === "file") {
+      if (!stat.executable) {
+        const chmodResult = this.fs.chmod(path, true);
+        if (!chmodResult.ok) {
+          return chmodResult;
+        }
+      }
+
+      const readResult = this.fs.readFile(path);
+      if ("error" in readResult) {
+        return { ok: false, error: `load: unable to read '${path}' (${readResult.error})` };
+      }
+
+      const isGeneratedSource = readResult.content.includes(RUNTIME_SOURCE_MARKER);
+      if (!(options?.overwriteGeneratedSource && isGeneratedSource)) {
+        return { ok: true };
+      }
+    } else {
+      const parentDir = this.parentDirectory(path);
+      const mkdirResult = this.fs.mkdir(parentDir);
+      if (!mkdirResult.ok) {
+        return mkdirResult;
+      }
+    }
+
+    const writeResult = this.fs.writeFile(path, desiredSource, { executable: true });
+    if (!writeResult.ok) {
+      return writeResult;
+    }
+
+    this.sourceProgramCache.delete(path);
+    return { ok: true };
+  }
+
+  private buildRuntimeExecutableSource(path: string, program: ProgramDefinition): string {
+    const runSource = this.formatRunFunctionSource(program.run);
+    return [
+      DEFAULT_EXECUTABLE_SHEBANG,
+      RUNTIME_SOURCE_MARKER,
+      `// path: ${path}`,
+      `// command: ${program.name}`,
+      `// description: ${program.description}`,
+      "export default async function main(ctx) {",
+      "  const args = Array.isArray(ctx?.args) ? ctx.args : [];",
+      "  const sys = ctx?.sys;",
+      "  if (!sys) {",
+      "    throw new Error(\"runtime sys context is unavailable\");",
+      "  }",
+      "  const runtime = sys.runtime;",
+      "  const helpers = sys.helpers ?? {};",
+      "  const system = typeof runtime?.getSystemConfig === \"function\" ? runtime.getSystemConfig() : {};",
+      "  const platformName = system?.platformName ?? \"\";",
+      "  const fs = sys.fs;",
+      "  const stdin = sys.process?.stdin ?? \"\";",
+      "  const isTTY = Boolean(sys.process?.isTTY);",
+      "  const user = sys.process?.user ?? \"\";",
+      "  const host = sys.process?.host ?? \"\";",
+      "  const runTui = sys.tui?.run;",
+      "  const sleep = sys.time?.sleep;",
+      "  const println = sys.console?.write;",
+      "  const clear = sys.console?.clear;",
+      "  const {",
+      "    makeSyscallSource,",
+      "    tokenizeShellInput,",
+      "    normalizeNslookupHost,",
+      "    parseNslookupRecordType,",
+      "    queryNslookup,",
+      "    isIpAddress,",
+      "    NSLOOKUP_PROVIDERS,",
+      "    NSLOOKUP_STATUS_TEXT,",
+      "    stripTrailingDot,",
+      "    nslookupAnswerType,",
+      "    resolveCurlTarget,",
+      "    basename,",
+      "    filenameFromUrl,",
+      "    resolvePingTarget,",
+      "    runPingProbe,",
+      "    joinPath,",
+      "    formatLsLongLine,",
+      "    colorizeLsName,",
+      "    SPINNER_FRAMES,",
+      "    SPARK_CHARS,",
+      "    sparkline,",
+      "    parseEchoEscapes,",
+      "    clamp,",
+      "    ANSI_RESET,",
+      "    ANSI_BOLD_GREEN,",
+      "    ANSI_BOLD_YELLOW,",
+      "    ANSI_DIM_RED,",
+      "    ANSI_BOLD_CYAN,",
+      "    enterInteractiveShell,",
+      "    exitInteractiveShell,",
+      "    usernameForUid,",
+      "    runTextEditorCommand,",
+      "    expandWildcardOperand,",
+      "    verifyUserPassword,",
+      "    currentEnvMap,",
+      "    isValidEnvName,",
+      "    shellUptimeSeconds,",
+      "    formatDurationCompact",
+      "  } = helpers;",
+      `  const __run = ${runSource};`,
+      "  await __run({ args, sys });",
+      "}"
+    ].join("\n");
+  }
+
+  private formatRunFunctionSource(run: ProgramDefinition["run"]): string {
+    const raw = run.toString().trim();
+    const normalized = this.normalizeFunctionExpression(raw);
+    return this.softFormatJavaScript(normalized);
+  }
+
+  private normalizeFunctionExpression(source: string): string {
+    let normalized = source;
+    if (/^async\s+[A-Za-z_$][\w$]*\s*\(/.test(normalized)) {
+      normalized = normalized.replace(/^async\s+([A-Za-z_$][\w$]*)\s*\(/, "async function $1(");
+    } else if (/^[A-Za-z_$][\w$]*\s*\(/.test(normalized)) {
+      normalized = normalized.replace(/^([A-Za-z_$][\w$]*)\s*\(/, "function $1(");
+    }
+
+    if (!normalized.startsWith("(")) {
+      normalized = `(${normalized})`;
+    }
+    return normalized;
+  }
+
+  private softFormatJavaScript(source: string): string {
+    const normalized = source.replace(/\r\n/g, "\n").trim();
+    if (normalized.includes("\n")) {
+      return normalized;
+    }
+
+    let out = "";
+    let inSingle = false;
+    let inDouble = false;
+    let inTemplate = false;
+    let inLineComment = false;
+    let inBlockComment = false;
+    let escaping = false;
+
+    for (let i = 0; i < normalized.length; i += 1) {
+      const char = normalized[i] ?? "";
+      const next = normalized[i + 1] ?? "";
+
+      if (inLineComment) {
+        out += char;
+        if (char === "\n") {
+          inLineComment = false;
+        }
+        continue;
+      }
+
+      if (inBlockComment) {
+        out += char;
+        if (char === "*" && next === "/") {
+          out += "/";
+          i += 1;
+          inBlockComment = false;
+        }
+        continue;
+      }
+
+      if (escaping) {
+        out += char;
+        escaping = false;
+        continue;
+      }
+
+      if (char === "\\") {
+        out += char;
+        if (inSingle || inDouble || inTemplate) {
+          escaping = true;
+        }
+        continue;
+      }
+
+      if (!inSingle && !inDouble && !inTemplate) {
+        if (char === "/" && next === "/") {
+          out += "//";
+          i += 1;
+          inLineComment = true;
+          continue;
+        }
+        if (char === "/" && next === "*") {
+          out += "/*";
+          i += 1;
+          inBlockComment = true;
+          continue;
+        }
+      }
+
+      if (char === "'" && !inDouble && !inTemplate) {
+        inSingle = !inSingle;
+        out += char;
+        continue;
+      }
+      if (char === "\"" && !inSingle && !inTemplate) {
+        inDouble = !inDouble;
+        out += char;
+        continue;
+      }
+      if (char === "`" && !inSingle && !inDouble) {
+        inTemplate = !inTemplate;
+        out += char;
+        continue;
+      }
+
+      if (!inSingle && !inDouble && !inTemplate) {
+        if (char === ";") {
+          out += ";\n";
+          continue;
+        }
+        if (char === "{") {
+          out += "{\n";
+          continue;
+        }
+        if (char === "}") {
+          out += "\n}";
+          continue;
+        }
+      }
+
+      out += char;
+    }
+
+    return out.replace(/\n{3,}/g, "\n\n");
+  }
+
+  private parentDirectory(path: string): string {
+    const normalized = path.endsWith("/") && path.length > 1 ? path.slice(0, -1) : path;
+    const slashIndex = normalized.lastIndexOf("/");
+    if (slashIndex <= 0) {
+      return "/";
+    }
+    return normalized.slice(0, slashIndex);
   }
 
   private seedVirtualUsers(options?: { ensureHomeDirectories?: boolean }): void {
@@ -1699,20 +2024,21 @@ export class Shell {
         return false;
       }
 
-      const program = this.executables.get(resolved.path);
-      const runtimeProgram = program ?? this.rehydrateRuntimeProgram(resolved.path);
-      let executableProgram = runtimeProgram;
+      const sourceProgram = this.loadProgramFromExecutableSource(resolved.path, name);
+      let executableProgram: ProgramDefinition | undefined;
+      if (sourceProgram?.ok) {
+        executableProgram = sourceProgram.program;
+      } else if (sourceProgram && !sourceProgram.ok) {
+        this.finalizeProcessRecord(process, { state: "Z", exitCode: 1 });
+        output(`${name}: ${sourceProgram.error}`);
+        this.updatePwdEnvironment();
+        this.syncCurrentShellFrame();
+        return false;
+      }
+
       if (!executableProgram) {
-        const sourceProgram = this.loadProgramFromExecutableSource(resolved.path, name);
-        if (sourceProgram?.ok) {
-          executableProgram = sourceProgram.program;
-        } else if (sourceProgram && !sourceProgram.ok) {
-          this.finalizeProcessRecord(process, { state: "Z", exitCode: 1 });
-          output(`${name}: ${sourceProgram.error}`);
-          this.updatePwdEnvironment();
-          this.syncCurrentShellFrame();
-          return false;
-        }
+        const runtimeProgram = this.executables.get(resolved.path) ?? this.rehydrateRuntimeProgram(resolved.path);
+        executableProgram = runtimeProgram;
       }
 
       if (!executableProgram) {
@@ -2000,6 +2326,16 @@ export class Shell {
   ): ProgramContext {
     const output = options?.stdout ?? ((message = "") => this.bridge.println(message));
     const actor = options?.runAsUser ?? this.getActiveUser();
+    const stdin = options?.stdin ?? "";
+    const isTTY = options?.isTTY ?? true;
+    const processInfo = {
+      stdin,
+      isTTY,
+      user: actor.username,
+      host: this.host,
+      cwd: this.fs.pwd()
+    };
+    const helpers = this.createHelperNamespace();
 
     const sys: Syscalls = {
       pwd: () => this.fs.pwd(),
@@ -2014,18 +2350,67 @@ export class Shell {
       },
       which: (command: string) => this.resolveExecutable(command),
       listExecutables: () => this.getPathExecutableEntries(),
-      now: () => new Date()
+      invokeRuntimeExecutable: async (path: string, context: ProgramContext) => {
+        const runtimeProgram = this.executables.get(path) ?? this.rehydrateRuntimeProgram(path);
+        if (!runtimeProgram) {
+          throw new Error(`runtime executable not found for ${path}`);
+        }
+        await runtimeProgram.run(context);
+      },
+      now: () => new Date(),
+      console: {
+        write: (message = "") => {
+          output(message);
+        },
+        clear: () => {
+          this.bridge.clear();
+        },
+        readSecret: async (prompt: string) => this.bridge.readSecret(prompt),
+        disconnect: (message?: string) => {
+          this.bridge.disconnect(message);
+        }
+      },
+      fs: this.fs,
+      process: processInfo,
+      time: {
+        now: () => new Date(),
+        sleep: delay
+      },
+      tui: {
+        run: async (program: TuiProgram) => {
+          await this.bridge.runTui(program);
+        }
+      },
+      exec: {
+        which: (command: string) => this.resolveExecutable(command),
+        resolveAll: (command: string) => this.resolveAllExecutables(command),
+        listExecutables: () => this.getPathExecutableEntries(),
+        runArgv: async (
+          argv: string[],
+          commandOptions?: {
+            stdin?: string;
+            stdout?: (message?: string) => void;
+            runAsUser?: VirtualUser;
+            isTTY?: boolean;
+          }
+        ) => {
+          return this.runCommandByArgv(argv, commandOptions);
+        },
+        runLine: async (line: string) => this.execute(line)
+      },
+      runtime: this,
+      helpers
     };
 
     return {
       args,
-      stdin: options?.stdin ?? "",
-      isTTY: options?.isTTY ?? true,
+      sys,
+      stdin,
+      isTTY,
       fs: this.fs,
       cwd: this.fs.pwd(),
       user: actor.username,
       host: this.host,
-      sys,
       println: (message = "") => {
         output(message);
       },
@@ -2705,7 +3090,11 @@ export class Shell {
   }
 
   private installCoreExecutables(materializeFiles = true): void {
-    installUnixTools(this, materializeFiles, {
+    installUnixTools(this, materializeFiles, this.createHelperNamespace() as unknown as Parameters<typeof installUnixTools>[2]);
+  }
+
+  private createHelperNamespace(): Record<string, unknown> {
+    return {
       makeSyscallSource,
       tokenizeShellInput,
       normalizeNslookupHost,
@@ -2724,6 +3113,9 @@ export class Shell {
       joinPath,
       formatLsLongLine,
       colorizeLsName,
+      SPINNER_FRAMES: HELPER_SPINNER_FRAMES,
+      SPARK_CHARS: HELPER_SPARK_CHARS,
+      sparkline: helperSparkline,
       parseEchoEscapes,
       clamp,
       ANSI_RESET,
@@ -2741,7 +3133,7 @@ export class Shell {
       isValidEnvName: this.isValidEnvName.bind(this),
       shellUptimeSeconds: this.shellUptimeSeconds.bind(this),
       formatDurationCompact: this.formatDurationCompact.bind(this)
-    });
+    };
   }
 
   private rehydrateRuntimeProgram(path: string): ProgramDefinition | undefined {
@@ -2756,6 +3148,7 @@ export class Shell {
   private loadProgramFromExecutableSource(path: string, commandName: string): SourceProgramLoadResult | null {
     const sourceResult = this.fs.readFile(path);
     if ("error" in sourceResult) {
+      this.sourceProgramCache.delete(path);
       return {
         ok: false,
         error: `unable to read executable source (${sourceResult.error})`
@@ -2763,6 +3156,14 @@ export class Shell {
     }
 
     const source = sourceResult.content;
+    const cached = this.sourceProgramCache.get(path);
+    if (cached && cached.source === source) {
+      return {
+        ok: true,
+        program: cached.program
+      };
+    }
+
     const sourceBody = source.replace(/^#![^\r\n]*(?:\r?\n)?/, "");
     const looksLikeJavaScript =
       source.startsWith(DEFAULT_EXECUTABLE_SHEBANG) ||
@@ -2771,6 +3172,7 @@ export class Shell {
       /\bexports\.default\b/.test(sourceBody);
 
     if (!looksLikeJavaScript) {
+      this.sourceProgramCache.delete(path);
       return null;
     }
 
@@ -2806,6 +3208,7 @@ export class Shell {
         await runtimeEntryPoint(context);
       };
     } catch (error) {
+      this.sourceProgramCache.delete(path);
       const message = error instanceof Error ? error.message : String(error);
       return {
         ok: false,
@@ -2819,7 +3222,10 @@ export class Shell {
       run: entryPoint
     };
 
-    this.executables.set(path, loadedProgram);
+    this.sourceProgramCache.set(path, {
+      source,
+      program: loadedProgram
+    });
     return { ok: true, program: loadedProgram };
   }
 

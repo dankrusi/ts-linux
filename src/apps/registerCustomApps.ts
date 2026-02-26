@@ -35,24 +35,25 @@ export const registerCustomApps = (
     register({
       name: "countdown",
       description: "animated output demo program",
-      run: async ({ args, println, sleep }) => {
+      run: async ({ args, sys }) => {
         const rawSeconds = Number.parseInt(args[0] ?? "3", 10);
         const seconds = Number.isNaN(rawSeconds) ? 3 : clamp(rawSeconds, 1, 20);
 
-        println(`starting countdown from ${seconds}`);
+        sys.console.write(`starting countdown from ${seconds}`);
         for (let i = seconds; i > 0; i -= 1) {
-          println(`  ${i}...`);
-          await sleep(350);
+          sys.console.write(`  ${i}...`);
+          await sys.time.sleep(350);
         }
-        println("launch complete");
+        sys.console.write("launch complete");
       }
     });
 
     register({
       name: "demo-ui",
       description: "blessed-style dashboard demo (q to quit)",
-      run: async ({ runTui }) => {
-        await runTui((ui: TuiContext) => {
+      run: async ({ args, sys }) => {
+        void args;
+        await sys.tui.run((ui: TuiContext) => {
           let ticks = 0;
           let selected = 0;
           const tabs = ["overview", "logs", "network"];
@@ -234,8 +235,9 @@ export const registerCustomApps = (
     register({
       name: "sysmon",
       description: "blessed-style system monitor (q to quit)",
-      run: async ({ runTui }) => {
-        await runTui((ui: TuiContext) => {
+      run: async ({ args, sys }) => {
+        void args;
+        await sys.tui.run((ui: TuiContext) => {
           let ticks = 0;
           let cpu = 0.44;
           let mem = 0.61;
@@ -388,8 +390,9 @@ export const registerCustomApps = (
     register({
       name: "ui-lab",
       description: "extended tui widget lab (q to quit)",
-      run: async ({ runTui }) => {
-        await runTui((ui: TuiContext) => {
+      run: async ({ args, sys }) => {
+        void args;
+        await sys.tui.run((ui: TuiContext) => {
           let tick = 0;
           let selectedSection = 0;
           let selectedService = 0;

@@ -20,7 +20,7 @@ export const installCurl: UnixCommandInstaller = (ctx): void => {
           "// runtime supports -i/-I/-X/-H/-d/-o/-L/-s/-S/-A/--url and related aliases",
           "if (!target) { sys.write('curl: missing URL'); }"
         ]),
-        run: async ({ args, sys, fs }) => {
+        run: async ({ args, sys }) => {
           let target: string | undefined;
           let method = "GET";
           let includeHeaders = false;
@@ -172,14 +172,14 @@ export const installCurl: UnixCommandInstaller = (ctx): void => {
             return;
           }
   
-          const resolvedTarget = resolveCurlTarget(target, fs);
+          const resolvedTarget = resolveCurlTarget(target, sys.fs);
           if ("error" in resolvedTarget) {
             writeError(resolvedTarget.error);
             return;
           }
   
           if (resolvedTarget.kind === "virtual-file") {
-            const fileResult = fs.readFile(resolvedTarget.path);
+            const fileResult = sys.fs.readFile(resolvedTarget.path);
             if ("error" in fileResult) {
               writeError(fileResult.error.replace(/^cat:/, "curl:"));
               return;
@@ -200,7 +200,7 @@ export const installCurl: UnixCommandInstaller = (ctx): void => {
                 : fileText;
   
             if (outputPath) {
-              const writeResult = fs.writeFile(outputPath, output);
+              const writeResult = sys.fs.writeFile(outputPath, output);
               if (!writeResult.ok) {
                 writeError(writeResult.error);
               }
@@ -242,7 +242,7 @@ export const installCurl: UnixCommandInstaller = (ctx): void => {
               : responseText;
   
           if (outputPath) {
-            const writeResult = fs.writeFile(outputPath, output);
+            const writeResult = sys.fs.writeFile(outputPath, output);
             if (!writeResult.ok) {
               writeError(writeResult.error);
             }

@@ -19,11 +19,11 @@ export const installRm: UnixCommandInstaller = (ctx): void => {
           "}",
           "if (targets.length === 0 && !force) { sys.write('rm: missing operand'); return; }",
           "for (const target of targets) {",
-          "  const result = fs.remove(target, { recursive, force });",
+          "  const result = sys.fs.remove(target, { recursive, force });",
           "  if (!result.ok) sys.write(result.error);",
           "}"
         ]),
-        run: ({ args, sys, fs }) => {
+        run: ({ args, sys }) => {
           let recursive = false;
           let force = false;
           let verbose = false;
@@ -91,7 +91,7 @@ export const installRm: UnixCommandInstaller = (ctx): void => {
           for (const rawTarget of rawTargets) {
             const targets = expandWildcardOperand(rawTarget);
             for (const target of targets) {
-              const result = fs.remove(target, { recursive, force });
+              const result = sys.fs.remove(target, { recursive, force });
               if (!result.ok) {
                 sys.write(result.error);
                 continue;

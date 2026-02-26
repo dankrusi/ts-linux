@@ -1,7 +1,7 @@
 import type { UnixCommandInstaller } from "../types";
 
 export const installCat: UnixCommandInstaller = (ctx): void => {
-  const { core, runtime, helpers } = ctx;
+  const { core, helpers } = ctx;
   const { makeSyscallSource } = helpers;
 
   core({
@@ -29,7 +29,7 @@ export const installCat: UnixCommandInstaller = (ctx): void => {
           "let previousBlank = false;",
           "const output = [];",
           "for (const target of targets) {",
-          "  const result = target === '-' ? { content: stdin } : sys.readFile(target);",
+          "  const result = target === '-' ? { content: sys.process.stdin } : sys.readFile(target);",
           "  if ('error' in result) { sys.write(result.error); continue; }",
           "  for (const line of result.content.split('\\n')) {",
           "    const blank = line.length === 0;",
@@ -43,7 +43,7 @@ export const installCat: UnixCommandInstaller = (ctx): void => {
           "}",
           "if (output.length > 0) sys.write(output.join('\\n'));"
         ]),
-        run: ({ args, sys, stdin }) => {
+        run: ({ args, sys }) => {
           let numberAll = false;
           let numberNonBlank = false;
           let squeezeBlank = false;
@@ -138,11 +138,11 @@ export const installCat: UnixCommandInstaller = (ctx): void => {
   
           for (const target of targets) {
             if (target === "-") {
-              consumeContent(stdin);
+              consumeContent(sys.process.stdin);
               continue;
             }
   
-            const result = runtime.fs.readFile(target);
+            const result = sys.runtime.fs.readFile(target);
             if ("error" in result) {
               sys.write(result.error);
               continue;

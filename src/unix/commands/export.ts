@@ -1,7 +1,7 @@
 import type { UnixCommandInstaller } from "../types";
 
 export const installExport: UnixCommandInstaller = (ctx): void => {
-  const { core, runtime, helpers } = ctx;
+  const { core, helpers } = ctx;
   const { makeSyscallSource, currentEnvMap, isValidEnvName } = helpers;
 
   core({
@@ -62,18 +62,18 @@ export const installExport: UnixCommandInstaller = (ctx): void => {
             }
   
             if (unexport) {
-              runtime.envVars.delete(name);
+              sys.runtime.envVars.delete(name);
               continue;
             }
   
             if (value !== undefined) {
-              runtime.envVars.set(name, value);
-            } else if (!runtime.envVars.has(name)) {
-              runtime.envVars.set(name, "");
+              sys.runtime.envVars.set(name, value);
+            } else if (!sys.runtime.envVars.has(name)) {
+              sys.runtime.envVars.set(name, "");
             }
           }
   
-          runtime.syncEnvironmentForActiveUser();
+          sys.runtime.syncEnvironmentForActiveUser();
           if (pendingPrint) {
             printEntries();
           }

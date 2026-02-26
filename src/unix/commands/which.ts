@@ -1,7 +1,7 @@
 import type { UnixCommandInstaller } from "../types";
 
 export const installWhich: UnixCommandInstaller = (ctx): void => {
-  const { core, runtime, helpers } = ctx;
+  const { core, helpers } = ctx;
   const { makeSyscallSource } = helpers;
 
   core({
@@ -48,7 +48,7 @@ export const installWhich: UnixCommandInstaller = (ctx): void => {
           }
   
           for (const name of names) {
-            const matches = runtime.resolveAllExecutables(name);
+            const matches = sys.runtime.resolveAllExecutables(name);
             if (matches.length === 0) {
               continue;
             }
