@@ -2,7 +2,7 @@ import type { UnixCommandInstaller } from "../types";
 
 export const installVim: UnixCommandInstaller = (ctx): void => {
   const { core, helpers } = ctx;
-  const { makeSyscallSource, runTextEditorCommand } = helpers;
+  const { makeSyscallSource } = helpers;
 
   core({
         name: "vim",
@@ -12,7 +12,7 @@ export const installVim: UnixCommandInstaller = (ctx): void => {
           "// controls: i insert, Esc normal, :w :q :wq"
         ]),
         run: async ({ args, sys }) => {
-          await runTextEditorCommand("vi", "vim", args, (message = "") => {
+          await sys.helpers.runTextEditorCommand("vi", "vim", args, (message = "") => {
             sys.write(message);
           });
         }

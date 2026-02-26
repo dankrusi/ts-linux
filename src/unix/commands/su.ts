@@ -2,7 +2,7 @@ import type { UnixCommandInstaller } from "../types";
 
 export const installSu: UnixCommandInstaller = (ctx): void => {
   const { core, helpers } = ctx;
-  const { makeSyscallSource, tokenizeShellInput, enterInteractiveShell, verifyUserPassword } = helpers;
+  const { makeSyscallSource } = helpers;
 
   core({
         name: "su",
@@ -64,7 +64,7 @@ export const installSu: UnixCommandInstaller = (ctx): void => {
                 sys.write(`su: option '${arg}' requires an argument`);
                 return;
               }
-              commandArgs = tokenizeShellInput(value);
+              commandArgs = sys.helpers.tokenizeShellInput(value);
               i += 1;
               continue;
             }
@@ -112,7 +112,7 @@ export const installSu: UnixCommandInstaller = (ctx): void => {
               return;
             }
   
-            const verified = await verifyUserPassword(target, suppliedPassword);
+            const verified = await sys.helpers.verifyUserPassword(target, suppliedPassword);
             if (!verified) {
               sys.write("su: Authentication failure");
               return;
@@ -146,7 +146,7 @@ export const installSu: UnixCommandInstaller = (ctx): void => {
             return;
           }
   
-          enterInteractiveShell({
+          sys.helpers.enterInteractiveShell({
             user: target,
             loginShell
           });

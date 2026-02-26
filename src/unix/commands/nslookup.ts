@@ -4,7 +4,7 @@ type NslookupRecordType = any;
 
 export const installNslookup: UnixCommandInstaller = (ctx): void => {
   const { core, helpers } = ctx;
-  const { makeSyscallSource, normalizeNslookupHost, parseNslookupRecordType, queryNslookup, isIpAddress, NSLOOKUP_PROVIDERS, NSLOOKUP_STATUS_TEXT, stripTrailingDot, nslookupAnswerType } = helpers;
+  const { makeSyscallSource } = helpers;
 
   core({
         name: "nslookup",
@@ -22,7 +22,7 @@ export const installNslookup: UnixCommandInstaller = (ctx): void => {
           let parsingOptions = true;
   
           const setRecordType = (rawValue: string): boolean => {
-            const parsed = parseNslookupRecordType(rawValue);
+            const parsed = sys.helpers.parseNslookupRecordType(rawValue);
             if (!parsed) {
               sys.write(`nslookup: unsupported query type '${rawValue}'`);
               return false;
@@ -116,17 +116,17 @@ export const installNslookup: UnixCommandInstaller = (ctx): void => {
             return;
           }
   
-          const host = normalizeNslookupHost(operands[0] ?? "");
+          const host = sys.helpers.normalizeNslookupHost(operands[0] ?? "");
           if (!host) {
             sys.write(`** server can't find ${operands[0] ?? ""}: NXDOMAIN`);
             return;
           }
   
           const requestedServer = operands[1];
-          let serverName = requestedServer ?? NSLOOKUP_PROVIDERS[0].name;
-          let serverAddress = requestedServer ?? NSLOOKUP_PROVIDERS[0].address;
+          let serverName = requestedServer ?? sys.helpers.NSLOOKUP_PROVIDERS[0].name;
+          let serverAddress = requestedServer ?? sys.helpers.NSLOOKUP_PROVIDERS[0].address;
   
-          if (isIpAddress(host)) {
+          if (sys.helpers.isIpAddress(host)) {
             sys.write(`Server:\t\t${serverName}`);
             sys.write(`Address:\t${serverAddress}#53`);
             sys.write("");
@@ -136,7 +136,7 @@ export const installNslookup: UnixCommandInstaller = (ctx): void => {
             return;
           }
   
-          const result = await queryNslookup(host, recordType, Math.round(timeoutSeconds * 1000));
+          const result = await sys.helpers.queryNslookup(host, recordType, Math.round(timeoutSeconds * 1000));
           if (result) {
             if (!requestedServer) {
               serverName = result.providerName;
@@ -154,7 +154,7 @@ export const installNslookup: UnixCommandInstaller = (ctx): void => {
           }
   
           if (result.statusCode !== 0 && result.answers.length === 0) {
-            const statusLabel = NSLOOKUP_STATUS_TEXT[result.statusCode] ?? `RCODE${result.statusCode}`;
+            const statusLabel = sys.helpers.NSLOOKUP_STATUS_TEXT[result.statusCode] ?? `RCODE${result.statusCode}`;
             sys.write(`** server can't find ${host}: ${statusLabel}`);
             if (result.comment) {
               sys.write(`;; ${result.comment}`);
@@ -176,14 +176,14 @@ export const installNslookup: UnixCommandInstaller = (ctx): void => {
               continue;
             }
   
-            const typeName = nslookupAnswerType(answer);
+            const typeName = sys.helpers.nslookupAnswerType(answer);
             if (typeName === "A" || typeName === "AAAA") {
-              sys.write(`Address:\t${stripTrailingDot(data)}`);
+              sys.write(`Address:\t${sys.helpers.stripTrailingDot(data)}`);
               continue;
             }
   
             if (typeName === "CNAME") {
-              sys.write(`canonical name = ${stripTrailingDot(data)}`);
+              sys.write(`canonical name = ${sys.helpers.stripTrailingDot(data)}`);
               continue;
             }
   
@@ -198,7 +198,7 @@ export const installNslookup: UnixCommandInstaller = (ctx): void => {
               continue;
             }
   
-            sys.write(`${typeName}:\t${stripTrailingDot(data)}`);
+            sys.write(`${typeName}:\t${sys.helpers.stripTrailingDot(data)}`);
           }
         }
       });

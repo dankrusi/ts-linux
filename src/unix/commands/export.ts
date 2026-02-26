@@ -2,7 +2,7 @@ import type { UnixCommandInstaller } from "../types";
 
 export const installExport: UnixCommandInstaller = (ctx): void => {
   const { core, helpers } = ctx;
-  const { makeSyscallSource, currentEnvMap, isValidEnvName } = helpers;
+  const { makeSyscallSource } = helpers;
 
   core({
         name: "export",
@@ -12,7 +12,7 @@ export const installExport: UnixCommandInstaller = (ctx): void => {
         ]),
         run: ({ args, sys }) => {
           const printEntries = (): void => {
-            const entries = [...currentEnvMap().entries()].sort((a, b) => a[0].localeCompare(b[0]));
+            const entries = [...sys.helpers.currentEnvMap().entries()].sort((a, b) => a[0].localeCompare(b[0]));
             for (const [key, value] of entries) {
               const escaped = value.replace(/\\/g, "\\\\").replace(/"/g, "\\\"");
               sys.write(`declare -x ${key}="${escaped}"`);
@@ -56,7 +56,7 @@ export const installExport: UnixCommandInstaller = (ctx): void => {
             const name = equalsIndex >= 0 ? arg.slice(0, equalsIndex) : arg;
             const value = equalsIndex >= 0 ? arg.slice(equalsIndex + 1) : undefined;
   
-            if (!isValidEnvName(name)) {
+            if (!sys.helpers.isValidEnvName(name)) {
               sys.write(`export: \`${arg}\`: not a valid identifier`);
               return;
             }

@@ -2,7 +2,7 @@ import type { UnixCommandInstaller } from "../types";
 
 export const installEcho: UnixCommandInstaller = (ctx): void => {
   const { core, helpers } = ctx;
-  const { makeSyscallSource, parseEchoEscapes } = helpers;
+  const { makeSyscallSource } = helpers;
 
   core({
         name: "echo",
@@ -61,7 +61,7 @@ export const installEcho: UnixCommandInstaller = (ctx): void => {
           }
   
           const text = words.join(" ");
-          const output = interpretEscapes ? parseEchoEscapes(text) : text;
+          const output = interpretEscapes ? sys.helpers.parseEchoEscapes(text) : text;
           sys.write(noNewline ? output : `${output}\n`);
         }
       });

@@ -108,6 +108,10 @@ Use `sys.*` namespaces for runtime APIs:
 - `sys.tui` for TUI execution
 - `sys.time` for clocks/sleep
 - `sys.process` for process-scoped values (`stdin`, `isTTY`, `user`, `host`, `cwd`)
-- `sys.exec`, `sys.runtime`, `sys.helpers` for advanced command/runtime integration
+- `sys.exec`, `sys.runtime` for command/runtime integration
+- helper namespaces for reusable tool logic:
+  - `sys.util`, `sys.path`, `sys.net`, `sys.dns`, `sys.text`, `sys.terminal`
+  - `sys.session`, `sys.auth`, `sys.envTools`, `sys.editor`
+  - legacy flat helper access still exists at `sys.helpers`
 
-Executable files are generated into the VFS from `run.toString()` during load. The generator applies a lightweight source formatter (including semicolon/newline normalization) before writing the file.
+Executable files are generated into the VFS from `run.toString()` during load. Generated files now contain the run function body directly (no helper prelude block). The generator applies a lightweight source formatter (including semicolon/newline normalization) before writing the file.

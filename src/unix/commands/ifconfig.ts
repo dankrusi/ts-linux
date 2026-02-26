@@ -2,7 +2,7 @@ import type { UnixCommandInstaller } from "../types";
 
 export const installIfconfig: UnixCommandInstaller = (ctx): void => {
   const { core, helpers } = ctx;
-  const { makeSyscallSource, shellUptimeSeconds } = helpers;
+  const { makeSyscallSource } = helpers;
 
   core({
         name: "ifconfig",
@@ -16,7 +16,7 @@ export const installIfconfig: UnixCommandInstaller = (ctx): void => {
             return;
           }
   
-          const seconds = shellUptimeSeconds();
+          const seconds = sys.helpers.shellUptimeSeconds();
           const rxPackets = 1200 + seconds * 3;
           const txPackets = 980 + seconds * 2;
           const rxBytes = rxPackets * 730;

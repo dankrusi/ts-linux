@@ -2,7 +2,7 @@ import type { UnixCommandInstaller } from "../types";
 
 export const installWget: UnixCommandInstaller = (ctx): void => {
   const { core, helpers } = ctx;
-  const { makeSyscallSource, resolveCurlTarget, basename, filenameFromUrl } = helpers;
+  const { makeSyscallSource } = helpers;
 
   core({
         name: "wget",
@@ -92,7 +92,7 @@ export const installWget: UnixCommandInstaller = (ctx): void => {
             return;
           }
   
-          const resolved = resolveCurlTarget(target, sys.fs);
+          const resolved = sys.helpers.resolveCurlTarget(target, sys.fs);
           if ("error" in resolved) {
             sys.write(resolved.error.replace(/^curl:/, "wget:"));
             return;
@@ -110,7 +110,7 @@ export const installWget: UnixCommandInstaller = (ctx): void => {
               }
               return;
             }
-            const destination = outputPath ?? basename(resolved.path);
+            const destination = outputPath ?? sys.helpers.basename(resolved.path);
             const writeResult = sys.fs.writeFile(destination, fileResult.content);
             if (!writeResult.ok) {
               sys.write(writeResult.error);
@@ -177,7 +177,7 @@ export const installWget: UnixCommandInstaller = (ctx): void => {
           }
   
           const body = await response.text();
-          const destination = outputPath ?? filenameFromUrl(targetUrl);
+          const destination = outputPath ?? sys.helpers.filenameFromUrl(targetUrl);
           const writeResult = sys.fs.writeFile(destination, body);
           if (!writeResult.ok) {
             sys.write(writeResult.error);

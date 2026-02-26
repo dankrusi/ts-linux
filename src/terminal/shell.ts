@@ -435,7 +435,17 @@ interface Syscalls {
     runLine(line: string): Promise<void>;
   };
   runtime: any;
-  helpers: Record<string, unknown>;
+  helpers: any;
+  util: any;
+  path: any;
+  net: any;
+  dns: any;
+  text: any;
+  terminal: any;
+  session: any;
+  auth: any;
+  envTools: any;
+  editor: any;
 }
 
 export interface ProgramContext {
@@ -1137,7 +1147,7 @@ export class Shell {
 
   private materializeExecutableIntoVfs(
     path: string,
-    options?: { overwriteGeneratedSource?: boolean }
+    options?: { overwriteGeneratedSource?: boolean; forceOverwrite?: boolean }
   ): FsResult {
     const program = this.executables.get(path) ?? this.rehydrateRuntimeProgram(path);
     if (!program) {
@@ -1165,7 +1175,7 @@ export class Shell {
       }
 
       const isGeneratedSource = readResult.content.includes(RUNTIME_SOURCE_MARKER);
-      if (!(options?.overwriteGeneratedSource && isGeneratedSource)) {
+      if (!(options?.forceOverwrite || (options?.overwriteGeneratedSource && isGeneratedSource))) {
         return { ok: true };
       }
     } else {
@@ -1186,7 +1196,26 @@ export class Shell {
   }
 
   private buildRuntimeExecutableSource(path: string, program: ProgramDefinition): string {
-    const runSource = this.formatRunFunctionSource(program.run);
+    const preferredRunSource = this.formatRunFunctionSource(program.run);
+    const runSource = preferredRunSource ?? this.buildRuntimeBridgeRunSource(path);
+    const source = this.renderRuntimeExecutableSource(path, program, runSource);
+    if (this.canCompileExecutableSource(source)) {
+      return source;
+    }
+
+    const fallbackSource = this.renderRuntimeExecutableSource(
+      path,
+      program,
+      this.buildRuntimeBridgeRunSource(path)
+    );
+    return fallbackSource;
+  }
+
+  private renderRuntimeExecutableSource(
+    path: string,
+    program: ProgramDefinition,
+    runSource: string
+  ): string {
     return [
       DEFAULT_EXECUTABLE_SHEBANG,
       RUNTIME_SOURCE_MARKER,
@@ -1199,69 +1228,81 @@ export class Shell {
       "  if (!sys) {",
       "    throw new Error(\"runtime sys context is unavailable\");",
       "  }",
-      "  const runtime = sys.runtime;",
-      "  const helpers = sys.helpers ?? {};",
-      "  const system = typeof runtime?.getSystemConfig === \"function\" ? runtime.getSystemConfig() : {};",
-      "  const platformName = system?.platformName ?? \"\";",
-      "  const fs = sys.fs;",
-      "  const stdin = sys.process?.stdin ?? \"\";",
-      "  const isTTY = Boolean(sys.process?.isTTY);",
-      "  const user = sys.process?.user ?? \"\";",
-      "  const host = sys.process?.host ?? \"\";",
-      "  const runTui = sys.tui?.run;",
-      "  const sleep = sys.time?.sleep;",
-      "  const println = sys.console?.write;",
-      "  const clear = sys.console?.clear;",
-      "  const {",
-      "    makeSyscallSource,",
-      "    tokenizeShellInput,",
-      "    normalizeNslookupHost,",
-      "    parseNslookupRecordType,",
-      "    queryNslookup,",
-      "    isIpAddress,",
-      "    NSLOOKUP_PROVIDERS,",
-      "    NSLOOKUP_STATUS_TEXT,",
-      "    stripTrailingDot,",
-      "    nslookupAnswerType,",
-      "    resolveCurlTarget,",
-      "    basename,",
-      "    filenameFromUrl,",
-      "    resolvePingTarget,",
-      "    runPingProbe,",
-      "    joinPath,",
-      "    formatLsLongLine,",
-      "    colorizeLsName,",
-      "    SPINNER_FRAMES,",
-      "    SPARK_CHARS,",
-      "    sparkline,",
-      "    parseEchoEscapes,",
-      "    clamp,",
-      "    ANSI_RESET,",
-      "    ANSI_BOLD_GREEN,",
-      "    ANSI_BOLD_YELLOW,",
-      "    ANSI_DIM_RED,",
-      "    ANSI_BOLD_CYAN,",
-      "    enterInteractiveShell,",
-      "    exitInteractiveShell,",
-      "    usernameForUid,",
-      "    runTextEditorCommand,",
-      "    expandWildcardOperand,",
-      "    verifyUserPassword,",
-      "    currentEnvMap,",
-      "    isValidEnvName,",
-      "    shellUptimeSeconds,",
-      "    formatDurationCompact",
-      "  } = helpers;",
       `  const __run = ${runSource};`,
-      "  await __run({ args, sys });",
+      "  await __run({ args, sys, ctx });",
       "}"
     ].join("\n");
   }
 
-  private formatRunFunctionSource(run: ProgramDefinition["run"]): string {
+  private buildRuntimeBridgeRunSource(path: string): string {
+    const serializedPath = JSON.stringify(path);
+    return [
+      "async ({ ctx, sys }) => {",
+      "  const invoke = sys?.runtime?.invokeRuntimeExecutable;",
+      "  if (typeof invoke !== \"function\") {",
+      "    throw new Error(\"runtime executable bridge is unavailable\");",
+      "  }",
+      "  if (!ctx) {",
+      "    throw new Error(\"runtime context is unavailable\");",
+      "  }",
+      `  await invoke(${serializedPath}, ctx);`,
+      "}"
+    ].join("\n");
+  }
+
+  private formatRunFunctionSource(run: ProgramDefinition["run"]): string | null {
     const raw = run.toString().trim();
+    if (this.canCompileFunctionExpression(raw)) {
+      return raw;
+    }
     const normalized = this.normalizeFunctionExpression(raw);
-    return this.softFormatJavaScript(normalized);
+    const formatted = this.softFormatJavaScript(normalized);
+    if (this.canCompileFunctionExpression(formatted)) {
+      return formatted;
+    }
+    if (this.canCompileFunctionExpression(normalized)) {
+      return normalized;
+    }
+    return null;
+  }
+
+  private canCompileFunctionExpression(expressionSource: string): boolean {
+    try {
+      const verifier = new Function(
+        "\"use strict\";\nconst __candidate = " + expressionSource + ";\nreturn typeof __candidate;"
+      ) as () => unknown;
+      const evaluated = verifier();
+      return evaluated === "function";
+    } catch {
+      return false;
+    }
+  }
+
+  private canCompileExecutableSource(source: string): boolean {
+    const sourceBody = source.replace(/^#![^\r\n]*(?:\r?\n)?/, "");
+    const transformedSource = sourceBody.replace(/\bexport\s+default\b/, "__jlinuxDefault =");
+    const factorySource = [
+      "\"use strict\";",
+      "let __jlinuxDefault;",
+      "const module = { exports: {} };",
+      "const exports = module.exports;",
+      transformedSource,
+      "const resolvedEntryPoint =",
+      "  (typeof __jlinuxDefault === 'function' && __jlinuxDefault) ||",
+      "  (typeof module.exports === 'function' && module.exports) ||",
+      "  (module.exports && typeof module.exports.default === 'function' && module.exports.default) ||",
+      "  (typeof exports.default === 'function' && exports.default) ||",
+      "  null;",
+      "return resolvedEntryPoint;"
+    ].join("\n");
+
+    try {
+      const sourceFactory = new Function(factorySource) as () => unknown;
+      const loaded = sourceFactory();
+      return typeof loaded === "function";
+    } catch {
+      return false;
+    }
   }
 
   private normalizeFunctionExpression(source: string): string {
@@ -1387,6 +1428,23 @@ export class Shell {
       return "/";
     }
     return normalized.slice(0, slashIndex);
+  }
+
+  private isGeneratedExecutableSource(path: string): boolean {
+    const sourceResult = this.fs.readFile(path);
+    if ("error" in sourceResult) {
+      return false;
+    }
+    return sourceResult.content.includes(RUNTIME_SOURCE_MARKER);
+  }
+
+  private repairGeneratedExecutableSource(path: string, options?: { forceOverwrite?: boolean }): FsResult {
+    return this.withUserFsCredentials(this.getRootUser(), () => {
+      return this.materializeExecutableIntoVfs(path, {
+        overwriteGeneratedSource: true,
+        forceOverwrite: options?.forceOverwrite ?? false
+      });
+    });
   }
 
   private seedVirtualUsers(options?: { ensureHomeDirectories?: boolean }): void {
@@ -2024,20 +2082,38 @@ export class Shell {
         return false;
       }
 
+      const runtimeProgram = this.executables.get(resolved.path) ?? this.rehydrateRuntimeProgram(resolved.path);
+      const generatedSource = this.isGeneratedExecutableSource(resolved.path);
       const sourceProgram = this.loadProgramFromExecutableSource(resolved.path, name);
       let executableProgram: ProgramDefinition | undefined;
       if (sourceProgram?.ok) {
         executableProgram = sourceProgram.program;
       } else if (sourceProgram && !sourceProgram.ok) {
-        this.finalizeProcessRecord(process, { state: "Z", exitCode: 1 });
-        output(`${name}: ${sourceProgram.error}`);
-        this.updatePwdEnvironment();
-        this.syncCurrentShellFrame();
-        return false;
+        if (runtimeProgram) {
+          const isCorePath = resolved.path.startsWith("/bin/");
+          if (generatedSource || isCorePath) {
+            const repairResult = this.repairGeneratedExecutableSource(resolved.path, {
+              forceOverwrite: isCorePath
+            });
+            if (repairResult.ok) {
+              const repairedSourceProgram = this.loadProgramFromExecutableSource(resolved.path, name);
+              if (repairedSourceProgram?.ok) {
+                executableProgram = repairedSourceProgram.program;
+              }
+            }
+          }
+
+          executableProgram ??= runtimeProgram;
+        } else {
+          this.finalizeProcessRecord(process, { state: "Z", exitCode: 1 });
+          output(`${name}: ${sourceProgram.error}`);
+          this.updatePwdEnvironment();
+          this.syncCurrentShellFrame();
+          return false;
+        }
       }
 
       if (!executableProgram) {
-        const runtimeProgram = this.executables.get(resolved.path) ?? this.rehydrateRuntimeProgram(resolved.path);
         executableProgram = runtimeProgram;
       }
 
@@ -2336,6 +2412,66 @@ export class Shell {
       cwd: this.fs.pwd()
     };
     const helpers = this.createHelperNamespace();
+    const helperNamespaces = {
+      util: {
+        clamp: helpers.clamp,
+        sparkline: helpers.sparkline,
+        spinnerFrames: helpers.SPINNER_FRAMES
+      },
+      path: {
+        join: helpers.joinPath,
+        basename: helpers.basename,
+        filenameFromUrl: helpers.filenameFromUrl
+      },
+      net: {
+        resolveCurlTarget: helpers.resolveCurlTarget,
+        resolvePingTarget: helpers.resolvePingTarget,
+        runPingProbe: helpers.runPingProbe
+      },
+      dns: {
+        normalizeHost: helpers.normalizeNslookupHost,
+        parseRecordType: helpers.parseNslookupRecordType,
+        query: helpers.queryNslookup,
+        isIpAddress: helpers.isIpAddress,
+        providers: helpers.NSLOOKUP_PROVIDERS,
+        statusText: helpers.NSLOOKUP_STATUS_TEXT,
+        stripTrailingDot: helpers.stripTrailingDot,
+        answerType: helpers.nslookupAnswerType
+      },
+      text: {
+        parseEchoEscapes: helpers.parseEchoEscapes,
+        tokenizeShellInput: helpers.tokenizeShellInput
+      },
+      terminal: {
+        formatLsLongLine: helpers.formatLsLongLine,
+        colorizeLsName: helpers.colorizeLsName,
+        ansi: {
+          reset: helpers.ANSI_RESET,
+          boldGreen: helpers.ANSI_BOLD_GREEN,
+          boldYellow: helpers.ANSI_BOLD_YELLOW,
+          dimRed: helpers.ANSI_DIM_RED,
+          boldCyan: helpers.ANSI_BOLD_CYAN
+        }
+      },
+      session: {
+        enterInteractiveShell: helpers.enterInteractiveShell,
+        exitInteractiveShell: helpers.exitInteractiveShell,
+        shellUptimeSeconds: helpers.shellUptimeSeconds,
+        formatDurationCompact: helpers.formatDurationCompact,
+        usernameForUid: helpers.usernameForUid,
+        expandWildcardOperand: helpers.expandWildcardOperand
+      },
+      auth: {
+        verifyUserPassword: helpers.verifyUserPassword
+      },
+      envTools: {
+        currentEnvMap: helpers.currentEnvMap,
+        isValidEnvName: helpers.isValidEnvName
+      },
+      editor: {
+        runTextEditorCommand: helpers.runTextEditorCommand
+      }
+    };
 
     const sys: Syscalls = {
       pwd: () => this.fs.pwd(),
@@ -2399,7 +2535,17 @@ export class Shell {
         runLine: async (line: string) => this.execute(line)
       },
       runtime: this,
-      helpers
+      helpers,
+      util: helperNamespaces.util,
+      path: helperNamespaces.path,
+      net: helperNamespaces.net,
+      dns: helperNamespaces.dns,
+      text: helperNamespaces.text,
+      terminal: helperNamespaces.terminal,
+      session: helperNamespaces.session,
+      auth: helperNamespaces.auth,
+      envTools: helperNamespaces.envTools,
+      editor: helperNamespaces.editor
     };
 
     return {

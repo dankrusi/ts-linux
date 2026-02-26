@@ -5,7 +5,7 @@ type VirtualProcess = any;
 
 export const installTop: UnixCommandInstaller = (ctx): void => {
   const { core, helpers } = ctx;
-  const { makeSyscallSource, clamp, shellUptimeSeconds, formatDurationCompact } = helpers;
+  const { makeSyscallSource } = helpers;
 
   core({
         name: "top",
@@ -26,15 +26,15 @@ export const installTop: UnixCommandInstaller = (ctx): void => {
             };
   
             const draw = (): void => {
-              const uptime = formatDurationCompact(shellUptimeSeconds());
+              const uptime = sys.helpers.formatDurationCompact(sys.helpers.shellUptimeSeconds());
               const processes = [...sys.runtime.processes.values()].sort((a, b) => a.pid - b.pid);
               const running = processes.filter((process) => process.state === "R").length;
               const sleeping = processes.filter((process) => process.state === "S").length;
               const stopped = processes.filter((process) => process.state === "T").length;
               const zombie = processes.filter((process) => process.state === "Z").length;
-              const load1 = clamp(0.2 + Math.sin(tick / 8) * 0.15 + Math.random() * 0.05, 0, 4);
-              const load5 = clamp(0.15 + Math.cos(tick / 10) * 0.1 + Math.random() * 0.04, 0, 4);
-              const load15 = clamp(0.1 + Math.sin(tick / 12) * 0.08 + Math.random() * 0.03, 0, 4);
+              const load1 = sys.helpers.clamp(0.2 + Math.sin(tick / 8) * 0.15 + Math.random() * 0.05, 0, 4);
+              const load5 = sys.helpers.clamp(0.15 + Math.cos(tick / 10) * 0.1 + Math.random() * 0.04, 0, 4);
+              const load15 = sys.helpers.clamp(0.1 + Math.sin(tick / 12) * 0.08 + Math.random() * 0.03, 0, 4);
   
               ui.clear(" ");
               ui.box(0, 0, ui.width, ui.height, {
@@ -64,8 +64,8 @@ export const installTop: UnixCommandInstaller = (ctx): void => {
                 if (!process) {
                   continue;
                 }
-                const cpu = clamp((process.pid % 17) * 2 + (tick % 7), 0, 99);
-                const mem = clamp((process.pid % 11) * 1.3 + ((tick + i) % 4), 0, 99);
+                const cpu = sys.helpers.clamp((process.pid % 17) * 2 + (tick % 7), 0, 99);
+                const mem = sys.helpers.clamp((process.pid % 11) * 1.3 + ((tick + i) % 4), 0, 99);
                 const row =
                   `${String(process.pid).padStart(5, " ")}  ${process.user.padEnd(8, " ")} ${process.state} ${cpu.toFixed(1).padStart(6, " ")} ${mem.toFixed(1).padStart(5, " ")} ${formatProcTime(process).padStart(6, " ")} ${process.command}`;
                 ui.text(2, 4 + i, row, {

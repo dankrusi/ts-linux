@@ -2,7 +2,7 @@ import type { UnixCommandInstaller } from "../types";
 
 export const installEnv: UnixCommandInstaller = (ctx): void => {
   const { core, helpers } = ctx;
-  const { makeSyscallSource, currentEnvMap, isValidEnvName } = helpers;
+  const { makeSyscallSource } = helpers;
 
   core({
         name: "env",
@@ -12,9 +12,9 @@ export const installEnv: UnixCommandInstaller = (ctx): void => {
           "// runtime supports: env, env -u NAME, env NAME=VALUE ... [command]"
         ]),
         run: async ({ args, sys }) => {
-          const scoped = currentEnvMap();
+          const scoped = sys.helpers.currentEnvMap();
           const applyUnset = (name: string): boolean => {
-            if (!isValidEnvName(name)) {
+            if (!sys.helpers.isValidEnvName(name)) {
               sys.write(`env: invalid variable name '${name}'`);
               return false;
             }
@@ -29,7 +29,7 @@ export const installEnv: UnixCommandInstaller = (ctx): void => {
             }
             const name = assignment.slice(0, index);
             const value = assignment.slice(index + 1);
-            if (!isValidEnvName(name)) {
+            if (!sys.helpers.isValidEnvName(name)) {
               sys.write(`env: '${name}': invalid variable name`);
               return false;
             }
@@ -97,7 +97,7 @@ export const installEnv: UnixCommandInstaller = (ctx): void => {
             }
   
             const actor = sys.runtime.getUser(sys.process.user) ?? sys.runtime.getActiveUser();
-            const previous = currentEnvMap();
+            const previous = sys.helpers.currentEnvMap();
             sys.runtime.replaceEnvironment(scoped);
             try {
               await sys.runtime.runCommandByArgv(commandArgs, {

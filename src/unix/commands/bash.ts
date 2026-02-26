@@ -2,7 +2,7 @@ import type { UnixCommandInstaller } from "../types";
 
 export const installBash: UnixCommandInstaller = (ctx): void => {
   const { core, helpers } = ctx;
-  const { makeSyscallSource, enterInteractiveShell, exitInteractiveShell } = helpers;
+  const { makeSyscallSource } = helpers;
 
   core({
         name: "bash",
@@ -73,7 +73,7 @@ export const installBash: UnixCommandInstaller = (ctx): void => {
           }
   
           const actor = sys.runtime.getUser(sys.process.user) ?? sys.runtime.getActiveUser();
-          const spawnedPid = enterInteractiveShell({
+          const spawnedPid = sys.helpers.enterInteractiveShell({
             user: actor,
             loginShell
           });
@@ -86,7 +86,7 @@ export const installBash: UnixCommandInstaller = (ctx): void => {
             await sys.runtime.execute(commandText);
           } finally {
             if (sys.runtime.shellPid === spawnedPid) {
-              exitInteractiveShell(0);
+              sys.helpers.exitInteractiveShell(0);
             }
           }
         }

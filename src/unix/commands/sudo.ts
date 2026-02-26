@@ -2,7 +2,7 @@ import type { UnixCommandInstaller } from "../types";
 
 export const installSudo: UnixCommandInstaller = (ctx): void => {
   const { core, helpers } = ctx;
-  const { makeSyscallSource, enterInteractiveShell, verifyUserPassword } = helpers;
+  const { makeSyscallSource } = helpers;
 
   core({
         name: "sudo",
@@ -135,7 +135,7 @@ export const installSudo: UnixCommandInstaller = (ctx): void => {
               }
             }
   
-            const verified = await verifyUserPassword(actor, suppliedPassword);
+            const verified = await sys.helpers.verifyUserPassword(actor, suppliedPassword);
             if (!verified) {
               sys.write("Sorry, try again.");
               sys.write("sudo: 1 incorrect password attempt");
@@ -150,7 +150,7 @@ export const installSudo: UnixCommandInstaller = (ctx): void => {
           }
 
           if (shellMode && commandArgs.length === 0) {
-            enterInteractiveShell({
+            sys.helpers.enterInteractiveShell({
               user: target,
               loginShell
             });

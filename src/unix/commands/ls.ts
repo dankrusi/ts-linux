@@ -4,7 +4,7 @@ type VNode = any;
 
 export const installLs: UnixCommandInstaller = (ctx): void => {
   const { core, helpers } = ctx;
-  const { makeSyscallSource, formatLsLongLine, colorizeLsName, usernameForUid } = helpers;
+  const { makeSyscallSource } = helpers;
 
   core({
         name: "ls",
@@ -235,18 +235,18 @@ export const installLs: UnixCommandInstaller = (ctx): void => {
   
             if (longFormat) {
               for (const entry of entries) {
-                const displayName = colorizeLsName(entry.name, entry.node, classify, colorizeOutput);
-                const owner = usernameForUid(entry.node.owner);
-                sys.write(formatLsLongLine(displayName, entry.node, entry.size, owner, humanReadable));
+                const displayName = sys.helpers.colorizeLsName(entry.name, entry.node, classify, colorizeOutput);
+                const owner = sys.helpers.usernameForUid(entry.node.owner);
+                sys.write(sys.helpers.formatLsLongLine(displayName, entry.node, entry.size, owner, humanReadable));
               }
             } else if (onePerLine) {
               for (const entry of entries) {
-                const displayName = colorizeLsName(entry.name, entry.node, classify, colorizeOutput);
+                const displayName = sys.helpers.colorizeLsName(entry.name, entry.node, classify, colorizeOutput);
                 sys.write(displayName);
               }
             } else {
               const names = entries.map((entry) =>
-                colorizeLsName(entry.name, entry.node, classify, colorizeOutput)
+                sys.helpers.colorizeLsName(entry.name, entry.node, classify, colorizeOutput)
               );
               sys.write(names.join("  "));
             }

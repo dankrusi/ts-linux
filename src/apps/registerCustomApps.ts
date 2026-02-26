@@ -2,29 +2,11 @@ import type { ProgramDefinition, RegisterExecutableOptions } from "../terminal/s
 import type { BrowserTerminal } from "../terminal/terminal";
 import type { TuiContext } from "../terminal/tui";
 
-const clamp = (value: number, min: number, max: number): number => {
-  return Math.max(min, Math.min(max, value));
-};
-
-const SPINNER_FRAMES = ["|", "/", "-", "\\"] as const;
-const SPARK_CHARS = ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"] as const;
-
-const sparkline = (values: number[]): string => {
-  return values
-    .map((value) => {
-      const index = clamp(Math.round(value * (SPARK_CHARS.length - 1)), 0, SPARK_CHARS.length - 1);
-      return SPARK_CHARS[index] ?? SPARK_CHARS[0];
-    })
-    .join("");
-};
-
 export const registerCustomApps = (
   terminal: BrowserTerminal,
   options?: RegisterExecutableOptions
 ): void => {
   const materializeFile = options?.materializeFile ?? true;
-  const system = terminal.getSystemConfig();
-  const platformName = system.platformName;
 
   const register = (program: ProgramDefinition): void => {
     terminal.registerProgram({
@@ -37,7 +19,7 @@ export const registerCustomApps = (
       description: "animated output demo program",
       run: async ({ args, sys }) => {
         const rawSeconds = Number.parseInt(args[0] ?? "3", 10);
-        const seconds = Number.isNaN(rawSeconds) ? 3 : clamp(rawSeconds, 1, 20);
+        const seconds = Number.isNaN(rawSeconds) ? 3 : sys.helpers.clamp(rawSeconds, 1, 20);
 
         sys.console.write(`starting countdown from ${seconds}`);
         for (let i = seconds; i > 0; i -= 1) {
@@ -53,6 +35,7 @@ export const registerCustomApps = (
       description: "blessed-style dashboard demo (q to quit)",
       run: async ({ args, sys }) => {
         void args;
+        const platformName = sys.runtime.getSystemConfig().platformName;
         await sys.tui.run((ui: TuiContext) => {
           let ticks = 0;
           let selected = 0;
@@ -67,7 +50,7 @@ export const registerCustomApps = (
           const latencyHistory = Array.from({ length: 28 }, (_, i) => 0.4 + Math.cos(i / 4) * 0.12);
 
           const pushHistory = (history: number[], value: number): void => {
-            history.push(clamp(value, 0, 1));
+            history.push(sys.helpers.clamp(value, 0, 1));
             if (history.length > 28) {
               history.shift();
             }
@@ -81,15 +64,15 @@ export const registerCustomApps = (
           };
 
           const draw = (): void => {
-            const spinner = SPINNER_FRAMES[ticks % SPINNER_FRAMES.length] ?? "|";
+            const spinner = sys.helpers.SPINNER_FRAMES[ticks % sys.helpers.SPINNER_FRAMES.length] ?? "|";
             const cpu = (Math.sin(ticks / 4.2) + 1) / 2;
             const mem = (Math.cos(ticks / 6.3 + 0.8) + 1) / 2;
             const net = (Math.sin(ticks / 8.7 + 1.2) + 1) / 2;
 
-            const leftWidth = clamp(Math.floor(ui.width * 0.58), 18, Math.max(18, ui.width - 18));
+            const leftWidth = sys.helpers.clamp(Math.floor(ui.width * 0.58), 18, Math.max(18, ui.width - 18));
             const rightX = leftWidth + 3;
             const rightWidth = Math.max(12, ui.width - rightX - 2);
-            const statusHeight = clamp(Math.floor(ui.height * 0.34), 8, 11);
+            const statusHeight = sys.helpers.clamp(Math.floor(ui.height * 0.34), 8, 11);
             const metersY = statusHeight + 3;
             const metersHeight = Math.max(6, ui.height - metersY - 2);
 
@@ -188,8 +171,8 @@ export const registerCustomApps = (
               charset: "ascii"
             });
 
-            ui.write(rightX + 2, metersY + 7, sparkline(cpuHistory), { fg: "cyan", bold: true });
-            ui.write(rightX + 2, metersY + 8, sparkline(latencyHistory), { fg: "magenta" });
+            ui.write(rightX + 2, metersY + 7, sys.helpers.sparkline(cpuHistory), { fg: "cyan", bold: true });
+            ui.write(rightX + 2, metersY + 8, sys.helpers.sparkline(latencyHistory), { fg: "magenta" });
 
             ui.write(3, ui.height - 2, "demo-ui: \u2190/\u2192 switch tab  q or Esc exit", {
               fg: "yellow",
@@ -201,7 +184,7 @@ export const registerCustomApps = (
           const stop = ui.interval(180, () => {
             ticks += 1;
             if (ticks % 4 === 0) {
-              const spinner = SPINNER_FRAMES[ticks % SPINNER_FRAMES.length] ?? "|";
+              const spinner = sys.helpers.SPINNER_FRAMES[ticks % sys.helpers.SPINNER_FRAMES.length] ?? "|";
               pushLog(`[${spinner}] tick ${ticks}: scheduler heartbeat ok`);
             }
             pushHistory(cpuHistory, (Math.sin(ticks / 4.2) + 1) / 2);
@@ -237,6 +220,7 @@ export const registerCustomApps = (
       description: "blessed-style system monitor (q to quit)",
       run: async ({ args, sys }) => {
         void args;
+        const system = sys.runtime.getSystemConfig();
         await sys.tui.run((ui: TuiContext) => {
           let ticks = 0;
           let cpu = 0.44;
@@ -250,19 +234,19 @@ export const registerCustomApps = (
           const procNames = ["kernel_task", "renderd", "net-agent", "scheduler"];
 
           const drift = (value: number, span: number): number => {
-            return clamp(value + (Math.random() - 0.5) * span, 0.04, 0.98);
+            return sys.helpers.clamp(value + (Math.random() - 0.5) * span, 0.04, 0.98);
           };
 
           const pushHistory = (history: number[], value: number): void => {
-            history.push(clamp(value, 0, 1));
+            history.push(sys.helpers.clamp(value, 0, 1));
             if (history.length > 32) {
               history.shift();
             }
           };
 
           const draw = (): void => {
-            const spinner = SPINNER_FRAMES[ticks % SPINNER_FRAMES.length] ?? "|";
-            const leftWidth = clamp(Math.floor(ui.width * 0.54), 20, Math.max(20, ui.width - 18));
+            const spinner = sys.helpers.SPINNER_FRAMES[ticks % sys.helpers.SPINNER_FRAMES.length] ?? "|";
+            const leftWidth = sys.helpers.clamp(Math.floor(ui.width * 0.54), 20, Math.max(20, ui.width - 18));
             const rightX = leftWidth + 3;
             const rightWidth = Math.max(12, ui.width - rightX - 2);
             const metricsY = 11;
@@ -351,8 +335,8 @@ export const registerCustomApps = (
               charset: "ascii"
             });
 
-            ui.write(4, metricsY + 7, sparkline(cpuHistory), { fg: "cyan", bold: true });
-            ui.write(4, metricsY + 8, sparkline(netHistory), { fg: "blue" });
+            ui.write(4, metricsY + 7, sys.helpers.sparkline(cpuHistory), { fg: "cyan", bold: true });
+            ui.write(4, metricsY + 8, sys.helpers.sparkline(netHistory), { fg: "blue" });
             ui.write(3, ui.height - 2, "sysmon: q or Esc exit", { fg: "yellow", bold: true });
 
             ui.render();
@@ -392,6 +376,7 @@ export const registerCustomApps = (
       description: "extended tui widget lab (q to quit)",
       run: async ({ args, sys }) => {
         void args;
+        const platformName = sys.runtime.getSystemConfig().platformName;
         await sys.tui.run((ui: TuiContext) => {
           let tick = 0;
           let selectedSection = 0;
@@ -427,8 +412,8 @@ export const registerCustomApps = (
           );
 
           const draw = (): void => {
-            const spinner = SPINNER_FRAMES[tick % SPINNER_FRAMES.length] ?? "|";
-            const leftWidth = clamp(Math.floor(ui.width * 0.28), 18, 26);
+            const spinner = sys.helpers.SPINNER_FRAMES[tick % sys.helpers.SPINNER_FRAMES.length] ?? "|";
+            const leftWidth = sys.helpers.clamp(Math.floor(ui.width * 0.28), 18, 26);
             const rightX = leftWidth + 3;
             const rightWidth = Math.max(10, ui.width - rightX - 2);
             const tableY = 11;
@@ -441,8 +426,8 @@ export const registerCustomApps = (
               return;
             }
 
-            const health = clamp(1 - selected.latency / 220, 0.05, 0.99);
-            const load = clamp(0.36 + Math.sin(tick / 6 + selectedSection / 2) * 0.24, 0.04, 0.98);
+            const health = sys.helpers.clamp(1 - selected.latency / 220, 0.05, 0.99);
+            const load = sys.helpers.clamp(0.36 + Math.sin(tick / 6 + selectedSection / 2) * 0.24, 0.04, 0.98);
 
             ui.clear(" ");
             ui.fillRect(0, 0, ui.width, 1, " ", { bg: "blue" });
@@ -584,17 +569,17 @@ export const registerCustomApps = (
                 continue;
               }
 
-              service.latency = clamp(service.latency + (Math.random() - 0.5) * 8, 4, 180);
+              service.latency = sys.helpers.clamp(service.latency + (Math.random() - 0.5) * 8, 4, 180);
 
               if (Math.random() < 0.02) {
                 service.status = service.status === "online" ? "degraded" : "online";
               }
 
-              service.uptime = clamp(service.uptime + (Math.random() - 0.49) * 0.03, 97.5, 99.999);
+              service.uptime = sys.helpers.clamp(service.uptime + (Math.random() - 0.49) * 0.03, 97.5, 99.999);
             }
 
-            const throughput = clamp(0.5 + Math.sin(tick / 8) * 0.24 + (Math.random() - 0.5) * 0.08, 0, 1);
-            const errors = clamp(0.08 + Math.max(0, Math.cos(tick / 10) * 0.15) + Math.random() * 0.03, 0, 1);
+            const throughput = sys.helpers.clamp(0.5 + Math.sin(tick / 8) * 0.24 + (Math.random() - 0.5) * 0.08, 0, 1);
+            const errors = sys.helpers.clamp(0.08 + Math.max(0, Math.cos(tick / 10) * 0.15) + Math.random() * 0.03, 0, 1);
 
             throughputHistory.push(throughput);
             errorHistory.push(errors);

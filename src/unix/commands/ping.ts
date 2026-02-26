@@ -2,7 +2,7 @@ import type { UnixCommandInstaller } from "../types";
 
 export const installPing: UnixCommandInstaller = (ctx): void => {
   const { core, helpers } = ctx;
-  const { makeSyscallSource, resolvePingTarget, runPingProbe, clamp } = helpers;
+  const { makeSyscallSource } = helpers;
 
   core({
         name: "ping",
@@ -149,13 +149,13 @@ export const installPing: UnixCommandInstaller = (ctx): void => {
             return;
           }
   
-          const resolved = resolvePingTarget(target);
+          const resolved = sys.helpers.resolvePingTarget(target);
           if ("error" in resolved) {
             sys.write(resolved.error);
             return;
           }
   
-          count = clamp(count, 1, 32);
+          count = sys.helpers.clamp(count, 1, 32);
           const intervalMs = Math.max(0, intervalSeconds * 1000);
           const timeoutMs = Math.max(100, timeoutSeconds * 1000);
   
@@ -174,7 +174,7 @@ export const installPing: UnixCommandInstaller = (ctx): void => {
   
           for (let seq = 1; seq <= count; seq += 1) {
             transmitted += 1;
-            const probe = await runPingProbe(resolved.url, timeoutMs);
+            const probe = await sys.helpers.runPingProbe(resolved.url, timeoutMs);
   
             if (probe.ok) {
               received += 1;

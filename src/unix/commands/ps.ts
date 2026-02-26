@@ -5,7 +5,7 @@ type VirtualProcess = any;
 
 export const installPs: UnixCommandInstaller = (ctx): void => {
   const { core, helpers } = ctx;
-  const { makeSyscallSource, ANSI_RESET, ANSI_BOLD_GREEN, ANSI_BOLD_YELLOW, ANSI_DIM_RED, ANSI_BOLD_CYAN } = helpers;
+  const { makeSyscallSource } = helpers;
 
   core({
         name: "ps",
@@ -20,17 +20,17 @@ export const installPs: UnixCommandInstaller = (ctx): void => {
             if (!sys.process.isTTY) {
               return text;
             }
-            return `${sgr}${text}${ANSI_RESET}`;
+            return `${sgr}${text}${sys.helpers.ANSI_RESET}`;
           };
           const colorizeProcessLine = (line: string, state: VirtualProcessState): string => {
             if (state === "R") {
-              return colorize(line, ANSI_BOLD_GREEN);
+              return colorize(line, sys.helpers.ANSI_BOLD_GREEN);
             }
             if (state === "T") {
-              return colorize(line, ANSI_BOLD_YELLOW);
+              return colorize(line, sys.helpers.ANSI_BOLD_YELLOW);
             }
             if (state === "Z") {
-              return colorize(line, ANSI_DIM_RED);
+              return colorize(line, sys.helpers.ANSI_DIM_RED);
             }
             return line;
           };
@@ -80,7 +80,7 @@ export const installPs: UnixCommandInstaller = (ctx): void => {
           };
   
           if (full) {
-            sys.write(colorize("UID        PID  PPID C STIME TTY          TIME CMD", ANSI_BOLD_CYAN));
+            sys.write(colorize("UID        PID  PPID C STIME TTY          TIME CMD", sys.helpers.ANSI_BOLD_CYAN));
             for (const process of rows) {
               const start = new Date(process.startedAt).toTimeString().slice(0, 5);
               const tty = process.pid <= 1 ? "?" : "pts/0";
@@ -91,7 +91,7 @@ export const installPs: UnixCommandInstaller = (ctx): void => {
             return;
           }
   
-          sys.write(colorize("  PID TTY          STAT   TIME COMMAND", ANSI_BOLD_CYAN));
+          sys.write(colorize("  PID TTY          STAT   TIME COMMAND", sys.helpers.ANSI_BOLD_CYAN));
           for (const process of rows) {
             const tty = process.pid <= 1 ? "?" : "pts/0";
             const line = `${String(process.pid).padStart(5, " ")} ${tty.padEnd(12, " ")} ${process.state.padEnd(4, " ")} ${processTime(process).padStart(6, " ")} ${process.command}`;

@@ -2,7 +2,7 @@ import type { UnixCommandInstaller } from "../types";
 
 export const installCp: UnixCommandInstaller = (ctx): void => {
   const { core, helpers } = ctx;
-  const { makeSyscallSource, basename, joinPath } = helpers;
+  const { makeSyscallSource } = helpers;
 
   core({
         name: "cp",
@@ -135,8 +135,8 @@ export const installCp: UnixCommandInstaller = (ctx): void => {
   
               let ok = true;
               for (const item of listing.items) {
-                const childSource = joinPath(sourceAbs, item.name);
-                const childTarget = joinPath(targetAbs, item.name);
+                const childSource = sys.helpers.joinPath(sourceAbs, item.name);
+                const childTarget = sys.helpers.joinPath(targetAbs, item.name);
                 if (!copyEntry(childSource, childTarget)) {
                   ok = false;
                 }
@@ -151,7 +151,7 @@ export const installCp: UnixCommandInstaller = (ctx): void => {
             let finalTarget = targetAbs;
             const targetStat = sys.fs.stat(finalTarget);
             if (targetStat?.kind === "dir") {
-              finalTarget = joinPath(finalTarget, basename(sourceAbs));
+              finalTarget = sys.helpers.joinPath(finalTarget, sys.helpers.basename(sourceAbs));
             }
   
             if (noClobber && sys.fs.exists(finalTarget)) {
@@ -191,7 +191,7 @@ export const installCp: UnixCommandInstaller = (ctx): void => {
   
             let targetAbs = destinationAbs;
             if (destinationIsDirectory) {
-              targetAbs = joinPath(destinationAbs, basename(sourceAbs));
+              targetAbs = sys.helpers.joinPath(destinationAbs, sys.helpers.basename(sourceAbs));
             }
   
             if (

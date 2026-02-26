@@ -2,7 +2,7 @@ import type { UnixCommandInstaller } from "../types";
 
 export const installRm: UnixCommandInstaller = (ctx): void => {
   const { core, helpers } = ctx;
-  const { makeSyscallSource, expandWildcardOperand } = helpers;
+  const { makeSyscallSource } = helpers;
 
   core({
         name: "rm",
@@ -89,7 +89,7 @@ export const installRm: UnixCommandInstaller = (ctx): void => {
           }
   
           for (const rawTarget of rawTargets) {
-            const targets = expandWildcardOperand(rawTarget);
+            const targets = sys.helpers.expandWildcardOperand(rawTarget);
             for (const target of targets) {
               const result = sys.fs.remove(target, { recursive, force });
               if (!result.ok) {

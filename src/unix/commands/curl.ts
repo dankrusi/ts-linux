@@ -2,7 +2,7 @@ import type { UnixCommandInstaller } from "../types";
 
 export const installCurl: UnixCommandInstaller = (ctx): void => {
   const { core, helpers } = ctx;
-  const { makeSyscallSource, resolveCurlTarget } = helpers;
+  const { makeSyscallSource } = helpers;
 
   core({
         name: "curl",
@@ -172,7 +172,7 @@ export const installCurl: UnixCommandInstaller = (ctx): void => {
             return;
           }
   
-          const resolvedTarget = resolveCurlTarget(target, sys.fs);
+          const resolvedTarget = sys.helpers.resolveCurlTarget(target, sys.fs);
           if ("error" in resolvedTarget) {
             writeError(resolvedTarget.error);
             return;
