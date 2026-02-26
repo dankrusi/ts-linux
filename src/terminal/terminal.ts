@@ -1,5 +1,6 @@
 import {
   ExecutableProgramDefinition,
+  FileMetadataOptions,
   ProgramDefinition,
   RegisterExecutableOptions,
   Shell,
@@ -191,12 +192,12 @@ export class BrowserTerminal implements ShellBridge {
     return this.shell.getSystemConfig();
   }
 
-  public addFile(path: string, content: string): void {
-    this.shell.writeFile(path, content);
+  public addFile(path: string, content: string, options?: FileMetadataOptions): void {
+    this.shell.writeFile(path, content, options);
   }
 
-  public addDirectory(path: string): void {
-    this.shell.mkdir(path);
+  public addDirectory(path: string, options?: FileMetadataOptions): void {
+    this.shell.mkdir(path, options);
   }
 
   public println(message = ""): void {
@@ -794,10 +795,10 @@ export class BrowserTerminal implements ShellBridge {
 
     const cursor = document.createElement("span");
     cursor.className = "cursor";
-    cursor.textContent = visibleBuffer[this.cursor] ?? " ";
+    cursor.textContent = "";
 
     const after = document.createElement("span");
-    after.textContent = visibleBuffer.slice(this.cursor + 1);
+    after.textContent = visibleBuffer.slice(this.cursor);
 
     this.line.replaceChildren(before, cursor, after);
   }

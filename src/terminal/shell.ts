@@ -478,7 +478,13 @@ export interface ExecutableProgramDefinition extends Omit<ProgramDefinition, "ru
   source?: string;
 }
 
-export interface RegisterExecutableOptions {
+export interface FileMetadataOptions {
+  owner?: number | string;
+  group?: number | string;
+  permissions?: number | string;
+}
+
+export interface RegisterExecutableOptions extends FileMetadataOptions {
   materializeFile?: boolean;
 }
 
@@ -531,6 +537,12 @@ interface ParsedCommand {
 type SourceProgramLoadResult =
   | { ok: true; program: ProgramDefinition }
   | { ok: false; error: string };
+
+interface ResolvedFileMetadataOptions {
+  owner?: number;
+  group?: number;
+  permissions?: number;
+}
 
 const DEFAULT_SYSTEM_CONFIG: ShellSystemConfig = {
   distributionName: "Ubuntu",
@@ -1021,6 +1033,7 @@ export class Shell {
   private readonly fs = new VirtualFS(HOME_PATH);
   private readonly executables = new Map<string, ProgramDefinition>();
   private readonly executableSeedSources = new Map<string, string>();
+  private readonly executableFileMetadata = new Map<string, ResolvedFileMetadataOptions>();
   private readonly sourceProgramCache = new Map<string, { source: string; program: ProgramDefinition }>();
   private readonly users = new Map<string, VirtualUser>();
   private readonly pathDirs = ["/bin", "/usr/bin", "/usr/local/bin"];
@@ -1090,15 +1103,41 @@ export class Shell {
     return !this.bootedFromPersistedState;
   }
 
-  public mkdir(path: string): void {
+  public mkdir(path: string, options?: FileMetadataOptions): void {
+    const metadata = this.resolveFileMetadataOptions(options, "mkdir");
     this.withUserFsCredentials(this.getRootUser(), () => {
-      this.fs.mkdir(path);
+      const mkdirResult = this.fs.mkdir(path);
+      if (!mkdirResult.ok) {
+        throw new Error(mkdirResult.error);
+      }
+
+      if (!metadata) {
+        return;
+      }
+
+      const applyResult = this.applyResolvedFileMetadata(this.fs.toAbsolute(path), metadata);
+      if (!applyResult.ok) {
+        throw new Error(applyResult.error);
+      }
     });
   }
 
-  public writeFile(path: string, content: string): void {
+  public writeFile(path: string, content: string, options?: FileMetadataOptions): void {
+    const metadata = this.resolveFileMetadataOptions(options, "addFile");
     this.withUserFsCredentials(this.getRootUser(), () => {
-      this.fs.writeFile(path, content);
+      const writeResult = this.fs.writeFile(path, content);
+      if (!writeResult.ok) {
+        throw new Error(writeResult.error);
+      }
+
+      if (!metadata) {
+        return;
+      }
+
+      const applyResult = this.applyResolvedFileMetadata(this.fs.toAbsolute(path), metadata);
+      if (!applyResult.ok) {
+        throw new Error(applyResult.error);
+      }
     });
   }
 
@@ -1111,6 +1150,7 @@ export class Shell {
     this.withUserFsCredentials(this.getRootUser(), () => {
       const absolutePath = this.fs.toAbsolute(program.path);
       const commandName = this.commandNameFromPath(absolutePath);
+      const metadata = this.resolveFileMetadataOptions(options, `registerExecutable(${absolutePath})`);
       let runtimeRun = program.run;
 
       if (!runtimeRun) {
@@ -1139,6 +1179,11 @@ export class Shell {
         run: runtimeRun
       });
       this.sourceProgramCache.delete(absolutePath);
+      if (metadata) {
+        this.executableFileMetadata.set(absolutePath, metadata);
+      } else {
+        this.executableFileMetadata.delete(absolutePath);
+      }
 
       if (materializeFile) {
         const writeResult = this.materializeExecutableIntoVfs(absolutePath, {
@@ -1206,7 +1251,7 @@ export class Shell {
 
       const isGeneratedSource = readResult.content.includes(RUNTIME_SOURCE_MARKER);
       if (!(options?.forceOverwrite || (options?.overwriteGeneratedSource && isGeneratedSource))) {
-        return { ok: true };
+        return this.applyRegisteredExecutableMetadata(path);
       }
     } else {
       const parentDir = this.parentDirectory(path);
@@ -1222,7 +1267,7 @@ export class Shell {
     }
 
     this.sourceProgramCache.delete(path);
-    return { ok: true };
+    return this.applyRegisteredExecutableMetadata(path);
   }
 
   private buildRuntimeExecutableSource(path: string, program: ProgramDefinition): string {
@@ -1983,6 +2028,124 @@ export class Shell {
       }
     }
     return String(uid);
+  }
+
+  private resolveFileMetadataOptions(
+    options: FileMetadataOptions | undefined,
+    operation: string
+  ): ResolvedFileMetadataOptions | null {
+    const owner = this.resolveIdentityOption(options?.owner, "owner", operation);
+    const group = this.resolveIdentityOption(options?.group, "group", operation);
+    const permissions = this.resolvePermissionOption(options?.permissions, operation);
+
+    if (owner === undefined && group === undefined && permissions === undefined) {
+      return null;
+    }
+
+    return {
+      owner,
+      group,
+      permissions
+    };
+  }
+
+  private resolveIdentityOption(
+    value: number | string | undefined,
+    kind: "owner" | "group",
+    operation: string
+  ): number | undefined {
+    if (value === undefined) {
+      return undefined;
+    }
+
+    if (typeof value === "number") {
+      if (!Number.isInteger(value) || value < 0) {
+        throw new Error(`${operation}: invalid ${kind} '${String(value)}'`);
+      }
+      return value;
+    }
+
+    const trimmed = value.trim();
+    if (trimmed.length === 0) {
+      throw new Error(`${operation}: invalid ${kind} '${value}'`);
+    }
+
+    if (/^\d+$/.test(trimmed)) {
+      return Number.parseInt(trimmed, 10);
+    }
+
+    const user = this.getUser(trimmed);
+    if (!user) {
+      throw new Error(`${operation}: unknown ${kind} '${trimmed}'`);
+    }
+
+    return kind === "owner" ? user.uid : user.gid;
+  }
+
+  private resolvePermissionOption(
+    value: number | string | undefined,
+    operation: string
+  ): number | undefined {
+    if (value === undefined) {
+      return undefined;
+    }
+
+    if (typeof value === "number") {
+      if (!Number.isInteger(value) || value < 0 || value > 0o7777) {
+        throw new Error(`${operation}: invalid permissions '${String(value)}'`);
+      }
+      return value & 0o777;
+    }
+
+    const trimmed = value.trim();
+    if (trimmed.length === 0) {
+      throw new Error(`${operation}: invalid permissions '${value}'`);
+    }
+
+    if (/^0o[0-7]{3,4}$/i.test(trimmed)) {
+      return Number.parseInt(trimmed.slice(2), 8) & 0o777;
+    }
+
+    if (/^[0-7]{3,4}$/.test(trimmed)) {
+      return Number.parseInt(trimmed, 8) & 0o777;
+    }
+
+    throw new Error(`${operation}: invalid permissions '${value}'`);
+  }
+
+  private applyResolvedFileMetadata(path: string, metadata: ResolvedFileMetadataOptions): FsResult {
+    const stat = this.fs.stat(path);
+    if (!stat) {
+      return { ok: false, error: `setattr: cannot access '${path}': No such file or directory` };
+    }
+
+    if (metadata.owner !== undefined || metadata.group !== undefined) {
+      const chownResult = this.fs.chown(
+        path,
+        metadata.owner ?? stat.owner,
+        metadata.group ?? stat.group
+      );
+      if (!chownResult.ok) {
+        return chownResult;
+      }
+    }
+
+    if (metadata.permissions !== undefined) {
+      const chmodResult = this.fs.chmodMode(path, metadata.permissions);
+      if (!chmodResult.ok) {
+        return chmodResult;
+      }
+    }
+
+    return { ok: true };
+  }
+
+  private applyRegisteredExecutableMetadata(path: string): FsResult {
+    const metadata = this.executableFileMetadata.get(path);
+    if (!metadata) {
+      return { ok: true };
+    }
+    return this.applyResolvedFileMetadata(path, metadata);
   }
 
   private async verifyUserPassword(user: VirtualUser, password: string): Promise<boolean> {

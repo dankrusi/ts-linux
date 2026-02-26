@@ -6,13 +6,16 @@ export const registerCustomApps = (
   terminal: BrowserTerminal,
   options?: RegisterExecutableOptions
 ): void => {
-  const materializeFile = options?.materializeFile ?? true;
+  const registerOptions: RegisterExecutableOptions = {
+    ...options,
+    materializeFile: options?.materializeFile ?? true
+  };
 
   const register = (program: ProgramDefinition): void => {
     terminal.registerProgram({
       ...program,
       showInHelp: false
-    }, { materializeFile });
+    }, registerOptions);
   };
     register({
       name: "countdown",

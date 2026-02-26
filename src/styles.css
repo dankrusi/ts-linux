@@ -1,15 +1,15 @@
 @import url("https://fonts.googleapis.com/css2?family=Ubuntu+Mono:wght@400;700&display=swap");
 
 :root {
-  --bg-0: #070c13;
-  --bg-1: #0f1926;
-  --bg-2: #15263c;
-  --ink: #d7e5f3;
-  --ink-subtle: #92a7bd;
-  --accent: #88fdb8;
-  --line: #2e4a64;
-  --panel: #09131d;
-  --title: #0f2238;
+  --bg-0: #1e1e1e;
+  --bg-1: #1e1e1e;
+  --bg-2: #1e1e1e;
+  --ink: #b1b1b1;
+  --ink-subtle: #8f8f8f;
+  --accent: #11a8cd;
+  --line: #11a8cd;
+  --panel: #1e1e1e;
+  --title: #1e1e1e;
 }
 
 * {
@@ -25,7 +25,12 @@ body {
 body {
   font-family: "Ubuntu Mono", "DejaVu Sans Mono", "Liberation Mono", "Noto Sans Mono", Menlo, Consolas, monospace;
   color: var(--ink);
-  background: #000;
+  background: var(--bg-0);
+}
+
+::selection {
+  background: rgba(17, 168, 205, 0.35);
+  color: #e6e6e6;
 }
 
 #app {
@@ -44,7 +49,7 @@ body {
   border: 0;
   border-radius: 0;
   overflow: hidden;
-  background: #000;
+  background: var(--bg-0);
   box-shadow: none;
 }
 
@@ -53,6 +58,7 @@ body {
   height: 100%;
   padding: 1rem;
   overflow-y: auto;
+  color: var(--ink);
   font-family: "Ubuntu Mono", "DejaVu Sans Mono", "Liberation Mono", "Noto Sans Mono", Menlo, Consolas, monospace;
   font-size: 0.95rem;
   line-height: 1.24rem;
@@ -144,7 +150,7 @@ body {
 .terminal-input {
   display: flex;
   white-space: pre;
-  color: #b6ceea;
+  color: var(--ink);
   margin-top: 0.15rem;
 }
 
@@ -159,26 +165,24 @@ body {
 
 .cursor {
   display: inline-block;
-  width: 1ch;
-  min-width: 1ch;
-  line-height: inherit;
-  vertical-align: top;
-  background: rgba(162, 194, 228, 0.9);
-  color: #0a1623;
+  width: 0;
+  height: 1em;
+  margin-left: -1px;
+  margin-right: -1px;
+  vertical-align: -0.1em;
+  border-left: 2px solid var(--accent);
   animation: blink 1.1s step-start infinite;
 }
 
 @keyframes blink {
   0%,
   49% {
-    background: rgba(162, 194, 228, 0.9);
-    color: #0a1623;
+    border-left-color: var(--accent);
   }
 
   50%,
   100% {
-    background: transparent;
-    color: inherit;
+    border-left-color: transparent;
   }
 }
 
@@ -188,10 +192,10 @@ body {
   font-size: 0.94rem;
   line-height: 1.22rem;
   font-feature-settings: "liga" 0, "calt" 0;
-  color: #e2effc;
+  color: var(--ink);
   white-space: pre;
   user-select: none;
-  text-shadow: 0 0 0.55px rgba(163, 208, 245, 0.25);
+  text-shadow: none;
 }
 
 .terminal-tui .tui-bold {

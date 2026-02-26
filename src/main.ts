@@ -65,10 +65,19 @@ const terminal = new BrowserTerminal(mount, {
 const shouldSeedHostDefaults = terminal.shouldSeedHostDefaults();
 
 if (shouldSeedHostDefaults) {
-  terminal.addDirectory("/opt/tools");
+  terminal.addDirectory("/opt/tools", {
+    owner: "root",
+    group: "root",
+    permissions: 0o755
+  });
   terminal.addFile(
     "/home/guest/notes.txt",
-    ["# notes", "- virtual fs is central", "- executables live in /bin style paths"].join("\n")
+    ["# notes", "- virtual fs is central", "- executables live in /bin style paths"].join("\n"),
+    {
+      owner: "guest",
+      group: "guest",
+      permissions: 0o644
+    }
   );
 }
 
@@ -89,7 +98,12 @@ terminal.registerExecutable({
     await sys.time.sleep(250);
     sys.console.write("hello from a dynamically registered program");
   }
-}, { materializeFile: shouldSeedHostDefaults });
+}, {
+  materializeFile: shouldSeedHostDefaults,
+  owner: "guest",
+  group: "guest",
+  permissions: 0o755
+});
 
 registerCustomApps(terminal, { materializeFile: shouldSeedHostDefaults });
 terminal.loadExecutablesIntoVfs();
