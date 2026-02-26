@@ -137,11 +137,27 @@ export class BrowserTerminal implements ShellBridge {
 
   public async boot(): Promise<void> {
     const system = this.shell.getSystemConfig();
-    this.println(
-      `${system.distributionName} ${system.distributionVersion} (${system.platformName} ${system.platformVersion})`
-    );
-    this.println("type 'help' to view commands");
-    this.focus();
+    this.busy = true;
+    this.renderInput();
+
+    try {
+      const promptUser = this.shell.getPrompt().split("@")[0] ?? "guest";
+      const remote = `${promptUser}@${system.hostName}`;
+      this.println(`Connecting to ${remote}...`);
+      await this.sleep(180);
+      this.println("Establishing encrypted session...");
+      await this.sleep(180);
+      this.println("Connection established.");
+      await this.sleep(120);
+      this.println(
+        `${system.distributionName} ${system.distributionVersion} (${system.platformName} ${system.platformVersion})`
+      );
+      this.println("type 'help' to view commands");
+    } finally {
+      this.busy = false;
+      this.renderInput();
+      this.focus();
+    }
   }
 
   public async runCommand(command: string): Promise<void> {
@@ -1107,5 +1123,11 @@ export class BrowserTerminal implements ShellBridge {
     const width = Math.max(MIN_TUI_COLS, Math.min(MAX_TUI_COLS, rawWidth));
     const height = Math.max(MIN_TUI_ROWS, Math.min(MAX_TUI_ROWS, rawHeight));
     return { width, height };
+  }
+
+  private async sleep(ms: number): Promise<void> {
+    await new Promise<void>((resolve) => {
+      window.setTimeout(resolve, Math.max(0, ms));
+    });
   }
 }
