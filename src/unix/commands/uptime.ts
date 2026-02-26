@@ -1,13 +1,11 @@
 import type { UnixCommandInstaller } from "../types";
 
 export const installUptime: UnixCommandInstaller = (ctx): void => {
-  const { core, helpers } = ctx;
-  const { makeSyscallSource } = helpers;
+  const { core } = ctx;
 
   core({
         name: "uptime",
         description: "show how long the system has been running",
-        source: makeSyscallSource("uptime", ["sys.write('up ...');"]),
         run: ({ args, sys }) => {
           let prettyOnly = false;
           let since = false;

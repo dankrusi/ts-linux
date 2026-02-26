@@ -1,15 +1,11 @@
 import type { UnixCommandInstaller } from "../types";
 
 export const installTail: UnixCommandInstaller = (ctx): void => {
-  const { core, helpers } = ctx;
-  const { makeSyscallSource } = helpers;
+  const { core } = ctx;
 
   core({
     name: "tail",
     description: "output the last part of files",
-    source: makeSyscallSource("tail", [
-      "// runtime supports: tail [-n LINES] [file ...]"
-    ]),
     run: ({ args, sys }) => {
       let lineCount = 10;
       let fromStart = false;

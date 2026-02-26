@@ -3,15 +3,11 @@ import type { UnixCommandInstaller } from "../types";
 type IdSelector = "default" | "uid" | "gid" | "groups";
 
 export const installId: UnixCommandInstaller = (ctx): void => {
-  const { core, helpers } = ctx;
-  const { makeSyscallSource } = helpers;
+  const { core } = ctx;
 
   core({
     name: "id",
     description: "print real and effective user and group IDs",
-    source: makeSyscallSource("id", [
-      "// runtime supports: id, id [-u|-g|-G] [-n] [user]"
-    ]),
     run: ({ args, sys }) => {
       let selector: IdSelector = "default";
       let nameOnly = false;

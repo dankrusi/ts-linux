@@ -1,20 +1,11 @@
 import type { UnixCommandInstaller } from "../types";
 
 export const installSu: UnixCommandInstaller = (ctx): void => {
-  const { core, helpers } = ctx;
-  const { makeSyscallSource } = helpers;
+  const { core } = ctx;
 
   core({
         name: "su",
         description: "switch user or run a command as another user",
-        source: makeSyscallSource("su", [
-          "let target = 'root';",
-          "let password;",
-          "let login = false;",
-          "let command = [];",
-          "// runtime implementation supports: su [-|--login] [user] [-c 'cmd'] [--password pass]",
-          "if (!target) sys.write('su: user not found');"
-        ]),
         run: async ({ args, sys }) => {
           let loginShell = false;
           let targetName = "root";

@@ -3,54 +3,11 @@ import type { UnixCommandInstaller } from "../types";
 type VNode = any;
 
 export const installLs: UnixCommandInstaller = (ctx): void => {
-  const { core, helpers } = ctx;
-  const { makeSyscallSource } = helpers;
+  const { core } = ctx;
 
   core({
         name: "ls",
         description: "list files and directories",
-        source: makeSyscallSource("ls", [
-          "let showAll = false;",
-          "let longFormat = false;",
-          "let onePerLine = false;",
-          "const targets = [];",
-          "for (const arg of args) {",
-          "  if (arg.startsWith('-') && arg !== '-') {",
-          "    for (const flag of arg.slice(1)) {",
-          "      if (flag === 'a') showAll = true;",
-          "      else if (flag === 'l') longFormat = true;",
-          "      else if (flag === '1') onePerLine = true;",
-          "      else { sys.write(`ls: invalid option -- '${flag}'`); return; }",
-          "    }",
-          "    continue;",
-          "  }",
-          "  targets.push(arg);",
-          "}",
-          "const listTargets = targets.length > 0 ? targets : ['.'];",
-          "for (const target of listTargets) {",
-          "  const result = sys.ls(target === '.' ? undefined : target);",
-          "  if (result.error) {",
-          "    sys.write(result.error);",
-          "    continue;",
-          "  }",
-          "  let items = result.items;",
-          "  if (!showAll) items = items.filter((item) => !item.name.startsWith('.'));",
-          "  if (longFormat) {",
-          "    for (const { name, node } of items) {",
-          "      const mode = node.kind === 'dir' ? 'drwxr-xr-x' : node.executable ? '-rwxr-xr-x' : '-rw-r--r--';",
-          "      const size = node.kind === 'dir' ? 4096 : node.content.length;",
-          "      sys.write(`${mode} 1 guest guest ${String(size).padStart(7)} ${name}`);",
-          "    }",
-          "    continue;",
-          "  }",
-          "  const names = items.map(({ name, node }) => (node.kind === 'dir' ? `${name}/` : node.executable ? `${name}*` : name));",
-          "  if (onePerLine) {",
-          "    for (const name of names) sys.write(name);",
-          "  } else {",
-          "    sys.write(names.join('  '));",
-          "  }",
-          "}",
-        ]),
         run: ({ args, sys }) => {
           let showAll = false;
           let longFormat = false;

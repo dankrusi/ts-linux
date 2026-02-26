@@ -1,25 +1,11 @@
 import type { UnixCommandInstaller } from "../types";
 
 export const installCurl: UnixCommandInstaller = (ctx): void => {
-  const { core, helpers } = ctx;
-  const { makeSyscallSource } = helpers;
+  const { core } = ctx;
 
   core({
         name: "curl",
         description: "fetch a URL (supports common curl flags)",
-        source: makeSyscallSource("curl", [
-          "let target;",
-          "let method = 'GET';",
-          "let includeHeaders = false;",
-          "let headOnly = false;",
-          "let body;",
-          "let outputPath;",
-          "let silent = false;",
-          "let showError = false;",
-          "const headers = new Headers();",
-          "// runtime supports -i/-I/-X/-H/-d/-o/-L/-s/-S/-A/--url and related aliases",
-          "if (!target) { sys.write('curl: missing URL'); }"
-        ]),
         run: async ({ args, sys }) => {
           let target: string | undefined;
           let method = "GET";

@@ -1,15 +1,11 @@
 import type { UnixCommandInstaller } from "../types";
 
 export const installExport: UnixCommandInstaller = (ctx): void => {
-  const { core, helpers } = ctx;
-  const { makeSyscallSource } = helpers;
+  const { core } = ctx;
 
   core({
         name: "export",
         description: "set exported environment variables",
-        source: makeSyscallSource("export", [
-          "// runtime supports: export NAME=value, export NAME, export -p, export -n NAME",
-        ]),
         run: ({ args, sys }) => {
           const printEntries = (): void => {
             const entries = [...sys.helpers.currentEnvMap().entries()].sort((a, b) => a[0].localeCompare(b[0]));

@@ -4,15 +4,11 @@ type VirtualProcessState = any;
 type VirtualProcess = any;
 
 export const installPs: UnixCommandInstaller = (ctx): void => {
-  const { core, helpers } = ctx;
-  const { makeSyscallSource } = helpers;
+  const { core } = ctx;
 
   core({
         name: "ps",
         description: "report process status",
-        source: makeSyscallSource("ps", [
-          "// runtime supports: ps, ps -ef"
-        ]),
         run: ({ args, sys }) => {
           let showAll = false;
           let full = false;

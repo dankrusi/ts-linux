@@ -4,15 +4,11 @@ type ModeClass = "u" | "g" | "o";
 type ModeOp = "+" | "-" | "=";
 
 export const installChmod: UnixCommandInstaller = (ctx): void => {
-  const { core, helpers } = ctx;
-  const { makeSyscallSource } = helpers;
+  const { core } = ctx;
 
   core({
     name: "chmod",
     description: "change file mode bits",
-    source: makeSyscallSource("chmod", [
-      "// runtime supports: chmod [-R] MODE FILE..."
-    ]),
     run: ({ args, sys }) => {
       let recursive = false;
       let verbose = false;

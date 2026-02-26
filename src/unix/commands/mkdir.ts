@@ -1,15 +1,11 @@
 import type { UnixCommandInstaller } from "../types";
 
 export const installMkdir: UnixCommandInstaller = (ctx): void => {
-  const { core, helpers } = ctx;
-  const { makeSyscallSource } = helpers;
+  const { core } = ctx;
 
   core({
     name: "mkdir",
     description: "create directories",
-    source: makeSyscallSource("mkdir", [
-      "// runtime supports: mkdir [-p] [-v] [-m MODE] dir ..."
-    ]),
     run: ({ args, sys }) => {
       let parents = false;
       let verbose = false;

@@ -1,15 +1,11 @@
 import type { UnixCommandInstaller } from "../types";
 
 export const installChown: UnixCommandInstaller = (ctx): void => {
-  const { core, helpers } = ctx;
-  const { makeSyscallSource } = helpers;
+  const { core } = ctx;
 
   core({
     name: "chown",
     description: "change file owner and group",
-    source: makeSyscallSource("chown", [
-      "// runtime supports: chown [-R] [owner][:group] FILE..."
-    ]),
     run: ({ args, sys }) => {
       let recursive = false;
       let verbose = false;

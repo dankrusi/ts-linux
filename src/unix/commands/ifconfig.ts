@@ -1,15 +1,11 @@
 import type { UnixCommandInstaller } from "../types";
 
 export const installIfconfig: UnixCommandInstaller = (ctx): void => {
-  const { core, helpers } = ctx;
-  const { makeSyscallSource } = helpers;
+  const { core } = ctx;
 
   core({
         name: "ifconfig",
         description: "configure network interfaces",
-        source: makeSyscallSource("ifconfig", [
-          "// runtime supports: ifconfig [-a]"
-        ]),
         run: ({ args, sys }) => {
           if (args.some((arg) => arg !== "-a" && arg !== "--all")) {
             sys.write(`ifconfig: unsupported option '${args[0] ?? ""}'`);

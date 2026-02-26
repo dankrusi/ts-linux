@@ -1,16 +1,11 @@
 import type { UnixCommandInstaller } from "../types";
 
 export const installEnv: UnixCommandInstaller = (ctx): void => {
-  const { core, helpers } = ctx;
-  const { makeSyscallSource } = helpers;
+  const { core } = ctx;
 
   core({
         name: "env",
         description: "print or run with modified environment",
-        source: makeSyscallSource("env", [
-          "const entries = Object.entries(process.env || {});",
-          "// runtime supports: env, env -u NAME, env NAME=VALUE ... [command]"
-        ]),
         run: async ({ args, sys }) => {
           const scoped = sys.helpers.currentEnvMap();
           const applyUnset = (name: string): boolean => {

@@ -3,18 +3,11 @@ import type { UnixCommandInstaller } from "../types";
 type NslookupRecordType = any;
 
 export const installNslookup: UnixCommandInstaller = (ctx): void => {
-  const { core, helpers } = ctx;
-  const { makeSyscallSource } = helpers;
+  const { core } = ctx;
 
   core({
         name: "nslookup",
         description: "query DNS records for a host",
-        source: makeSyscallSource("nslookup", [
-          "let type = 'A';",
-          "let timeout = 3;",
-          "let target;",
-          "// runtime supports: nslookup [-type=AAAA] [-timeout=3] host [server]"
-        ]),
         run: async ({ args, sys }) => {
           let recordType: NslookupRecordType = "A";
           let timeoutSeconds = 3;

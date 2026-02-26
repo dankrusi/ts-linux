@@ -1,19 +1,11 @@
 import type { UnixCommandInstaller } from "../types";
 
 export const installSudo: UnixCommandInstaller = (ctx): void => {
-  const { core, helpers } = ctx;
-  const { makeSyscallSource } = helpers;
+  const { core } = ctx;
 
   core({
         name: "sudo",
         description: "run a command as another user",
-        source: makeSyscallSource("sudo", [
-          "let user = 'root';",
-          "let password;",
-          "let command = [];",
-          "// runtime implementation supports: sudo [-u user] [-s|-i] [-S] [--password pass] command",
-          "if (command.length === 0) sys.write('sudo: missing command');"
-        ]),
         run: async ({ args, sys }) => {
           let targetName = "root";
           let password: string | undefined;

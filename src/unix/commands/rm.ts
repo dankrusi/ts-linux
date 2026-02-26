@@ -1,28 +1,11 @@
 import type { UnixCommandInstaller } from "../types";
 
 export const installRm: UnixCommandInstaller = (ctx): void => {
-  const { core, helpers } = ctx;
-  const { makeSyscallSource } = helpers;
+  const { core } = ctx;
 
   core({
         name: "rm",
         description: "remove files or directories",
-        source: makeSyscallSource("rm", [
-          "let recursive = false;",
-          "let force = false;",
-          "const targets = [];",
-          "for (const arg of args) {",
-          "  if (arg === '--rf' || arg === '--fr') { recursive = true; force = true; continue; }",
-          "  if (arg === '-r' || arg === '-R' || arg === '--recursive') recursive = true;",
-          "  else if (arg === '-f' || arg === '--force') force = true;",
-          "  else targets.push(arg);",
-          "}",
-          "if (targets.length === 0 && !force) { sys.write('rm: missing operand'); return; }",
-          "for (const target of targets) {",
-          "  const result = sys.fs.remove(target, { recursive, force });",
-          "  if (!result.ok) sys.write(result.error);",
-          "}"
-        ]),
         run: ({ args, sys }) => {
           let recursive = false;
           let force = false;

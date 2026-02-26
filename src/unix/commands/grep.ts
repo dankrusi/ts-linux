@@ -6,15 +6,11 @@ interface GrepInput {
 }
 
 export const installGrep: UnixCommandInstaller = (ctx): void => {
-  const { core, helpers } = ctx;
-  const { makeSyscallSource } = helpers;
+  const { core } = ctx;
 
   core({
     name: "grep",
     description: "print lines matching a pattern",
-    source: makeSyscallSource("grep", [
-      "// runtime supports: grep [-invc] [-r] pattern [file ...]"
-    ]),
     run: ({ args, sys }) => {
       let ignoreCase = false;
       let invert = false;

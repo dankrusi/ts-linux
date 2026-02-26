@@ -1,13 +1,11 @@
 import type { UnixCommandInstaller } from "../types";
 
 export const installDate: UnixCommandInstaller = (ctx): void => {
-  const { core, helpers } = ctx;
-  const { makeSyscallSource } = helpers;
+  const { core } = ctx;
 
   core({
         name: "date",
         description: "print current date/time",
-        source: makeSyscallSource("date", ["// runtime supports: date [-u] [+FORMAT] [-R]"]),
         run: ({ args, sys }) => {
           const pad2 = (value: number): string => String(value).padStart(2, "0");
           const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];

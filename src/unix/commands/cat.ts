@@ -1,48 +1,11 @@
 import type { UnixCommandInstaller } from "../types";
 
 export const installCat: UnixCommandInstaller = (ctx): void => {
-  const { core, helpers } = ctx;
-  const { makeSyscallSource } = helpers;
+  const { core } = ctx;
 
   core({
         name: "cat",
         description: "print file contents",
-        source: makeSyscallSource("cat", [
-          "let numberAll = false;",
-          "let numberNonBlank = false;",
-          "let squeezeBlank = false;",
-          "const targets = [];",
-          "for (const arg of args) {",
-          "  if (arg.startsWith('-') && arg !== '-') {",
-          "    for (const flag of arg.slice(1)) {",
-          "      if (flag === 'n') numberAll = true;",
-          "      else if (flag === 'b') numberNonBlank = true;",
-          "      else if (flag === 's') squeezeBlank = true;",
-          "      else { sys.write(`cat: invalid option -- '${flag}'`); return; }",
-          "    }",
-          "    continue;",
-          "  }",
-          "  targets.push(arg);",
-          "}",
-          "if (targets.length === 0) targets.push('-');",
-          "let lineNo = 1;",
-          "let previousBlank = false;",
-          "const output = [];",
-          "for (const target of targets) {",
-          "  const result = target === '-' ? { content: sys.process.stdin } : sys.readFile(target);",
-          "  if ('error' in result) { sys.write(result.error); continue; }",
-          "  for (const line of result.content.split('\\n')) {",
-          "    const blank = line.length === 0;",
-          "    if (squeezeBlank && blank && previousBlank) continue;",
-          "    previousBlank = blank;",
-          "    let rendered = line;",
-          "    if (numberNonBlank) { if (!blank) rendered = `${String(lineNo++).padStart(6)}\\t${line}`; }",
-          "    else if (numberAll) rendered = `${String(lineNo++).padStart(6)}\\t${line}`;",
-          "    output.push(rendered);",
-          "  }",
-          "}",
-          "if (output.length > 0) sys.write(output.join('\\n'));"
-        ]),
         run: ({ args, sys }) => {
           let numberAll = false;
           let numberNonBlank = false;

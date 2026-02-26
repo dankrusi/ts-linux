@@ -1,15 +1,11 @@
 import type { UnixCommandInstaller } from "../types";
 
 export const installKill: UnixCommandInstaller = (ctx): void => {
-  const { core, helpers } = ctx;
-  const { makeSyscallSource } = helpers;
+  const { core } = ctx;
 
   core({
         name: "kill",
         description: "send a signal to a process",
-        source: makeSyscallSource("kill", [
-          "// runtime supports: kill [-SIGNAL] pid ..."
-        ]),
         run: ({ args, sys }) => {
           if (args.length === 0) {
             sys.write("kill: usage: kill [-s sigspec | -signum | -sigspec] pid");

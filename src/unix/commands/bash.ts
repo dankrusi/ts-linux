@@ -1,20 +1,11 @@
 import type { UnixCommandInstaller } from "../types";
 
 export const installBash: UnixCommandInstaller = (ctx): void => {
-  const { core, helpers } = ctx;
-  const { makeSyscallSource } = helpers;
+  const { core } = ctx;
 
   core({
         name: "bash",
         description: "GNU Bourne-Again SHell",
-        source: makeSyscallSource("bash", [
-          "let loginShell = false;",
-          "let command = '';",
-          "// runtime supports: bash, bash -l, bash -c \"command\"",
-          "if (command) {",
-          "  // run command in child shell and exit",
-          "}"
-        ]),
         run: async ({ args, sys }) => {
           let loginShell = false;
           let commandText: string | null = null;

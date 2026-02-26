@@ -1,15 +1,11 @@
 import type { UnixCommandInstaller } from "../types";
 
 export const installWget: UnixCommandInstaller = (ctx): void => {
-  const { core, helpers } = ctx;
-  const { makeSyscallSource } = helpers;
+  const { core } = ctx;
 
   core({
         name: "wget",
         description: "retrieve files from the web",
-        source: makeSyscallSource("wget", [
-          "// runtime supports: wget [-q] [-O file] URL"
-        ]),
         run: async ({ args, sys }) => {
           let target: string | undefined;
           let outputPath: string | undefined;

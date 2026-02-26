@@ -1,15 +1,11 @@
 import type { UnixCommandInstaller } from "../types";
 
 export const installMv: UnixCommandInstaller = (ctx): void => {
-  const { core, helpers } = ctx;
-  const { makeSyscallSource } = helpers;
+  const { core } = ctx;
 
   core({
     name: "mv",
     description: "move (rename) files and directories",
-    source: makeSyscallSource("mv", [
-      "// runtime supports: mv [-f] [-n] [-v] source... destination"
-    ]),
     run: ({ args, sys }) => {
       let force = false;
       let noClobber = false;

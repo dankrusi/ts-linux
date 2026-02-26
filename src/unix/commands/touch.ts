@@ -1,26 +1,11 @@
 import type { UnixCommandInstaller } from "../types";
 
 export const installTouch: UnixCommandInstaller = (ctx): void => {
-  const { core, helpers } = ctx;
-  const { makeSyscallSource } = helpers;
+  const { core } = ctx;
 
   core({
         name: "touch",
         description: "create files or update file timestamps",
-        source: makeSyscallSource("touch", [
-          "let noCreate = false;",
-          "const paths = [];",
-          "for (const arg of args) {",
-          "  if (arg === '-c' || arg === '--no-create') { noCreate = true; continue; }",
-          "  if (arg === '-a' || arg === '-m') { continue; }",
-          "  paths.push(arg);",
-          "}",
-          "if (paths.length === 0) { sys.write('touch: missing file operand'); return; }",
-          "for (const path of paths) {",
-          "  const result = sys.fs.touch(path, { noCreate });",
-          "  if (!result.ok) sys.write(result.error);",
-          "}"
-        ]),
         run: ({ args, sys }) => {
           let noCreate = false;
           const targets: string[] = [];

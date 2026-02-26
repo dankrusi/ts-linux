@@ -1,13 +1,11 @@
 import type { UnixCommandInstaller } from "../types";
 
 export const installClear: UnixCommandInstaller = (ctx): void => {
-  const { core, helpers } = ctx;
-  const { makeSyscallSource } = helpers;
+  const { core } = ctx;
 
   core({
         name: "clear",
         description: "clear terminal output",
-        source: makeSyscallSource("clear", ["sys.clear();"]),
         run: ({ args, sys }) => {
           void args;
           sys.clear();

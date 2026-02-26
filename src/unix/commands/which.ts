@@ -1,35 +1,11 @@
 import type { UnixCommandInstaller } from "../types";
 
 export const installWhich: UnixCommandInstaller = (ctx): void => {
-  const { core, helpers } = ctx;
-  const { makeSyscallSource } = helpers;
+  const { core } = ctx;
 
   core({
         name: "which",
         description: "show command path from $PATH",
-        source: makeSyscallSource("which", [
-          "let showAll = false;",
-          "const names = [];",
-          "for (const arg of args) {",
-          "  if (arg === '-a') {",
-          "    showAll = true;",
-          "    continue;",
-          "  }",
-          "  names.push(arg);",
-          "}",
-          "if (names.length === 0) {",
-          "  sys.write('which: missing command name');",
-          "  return;",
-          "}",
-          "for (const name of names) {",
-          "  const resolved = sys.which(name);",
-          "  if ('error' in resolved) {",
-          "    continue;",
-          "  }",
-          "  sys.write(resolved.path);",
-          "  if (!showAll) break;",
-          "}"
-        ]),
         run: ({ args, sys }) => {
           let showAll = false;
           const names: string[] = [];

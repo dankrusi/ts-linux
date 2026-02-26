@@ -1,15 +1,11 @@
 import type { UnixCommandInstaller } from "../types";
 
 export const installNetstat: UnixCommandInstaller = (ctx): void => {
-  const { core, helpers } = ctx;
-  const { makeSyscallSource } = helpers;
+  const { core } = ctx;
 
   core({
         name: "netstat",
         description: "network statistics",
-        source: makeSyscallSource("netstat", [
-          "// runtime supports: netstat [-tulpan]"
-        ]),
         run: ({ args, sys }) => {
           let includeTcp = false;
           let includeUdp = false;

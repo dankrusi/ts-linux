@@ -1,17 +1,11 @@
 import type { UnixCommandInstaller } from "../types";
 
 export const installExit: UnixCommandInstaller = (ctx): void => {
-  const { core, helpers } = ctx;
-  const { makeSyscallSource } = helpers;
+  const { core } = ctx;
 
   core({
         name: "exit",
         description: "exit the shell",
-        source: makeSyscallSource("exit", [
-          "const code = Number(args[0] ?? 0);",
-          "sys.write('exit');",
-          "// runtime exits current shell context when nested"
-        ]),
         run: ({ args, sys }) => {
           let exitCode = 0;
   

@@ -4,15 +4,11 @@ type TuiContext = any;
 type VirtualProcess = any;
 
 export const installTop: UnixCommandInstaller = (ctx): void => {
-  const { core, helpers } = ctx;
-  const { makeSyscallSource } = helpers;
+  const { core } = ctx;
 
   core({
         name: "top",
         description: "display Linux processes",
-        source: makeSyscallSource("top", [
-          "// runtime supports: top (q to quit)"
-        ]),
         run: async ({ args, sys }) => {
           void args;
           await sys.tui.run((ui: TuiContext) => {

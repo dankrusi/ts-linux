@@ -1,19 +1,11 @@
 import type { UnixCommandInstaller } from "../types";
 
 export const installPing: UnixCommandInstaller = (ctx): void => {
-  const { core, helpers } = ctx;
-  const { makeSyscallSource } = helpers;
+  const { core } = ctx;
 
   core({
         name: "ping",
         description: "send ping probes to a network host",
-        source: makeSyscallSource("ping", [
-          "let count = 4;",
-          "let interval = 1;",
-          "let timeout = 2;",
-          "let target;",
-          "// runtime implementation supports: ping [-c count] [-i interval] [-W timeout] host"
-        ]),
         run: async ({ args, sys }) => {
           let count = 4;
           let intervalSeconds = 1;
@@ -154,14 +146,42 @@ export const installPing: UnixCommandInstaller = (ctx): void => {
             sys.write(resolved.error);
             return;
           }
-  
+
+          let responseHost = resolved.host;
+          const dnsTarget = sys.helpers.normalizeNslookupHost(resolved.host);
+          if (dnsTarget && !sys.helpers.isIpAddress(dnsTarget)) {
+            const dnsTimeoutMs = Math.max(300, Math.min(3000, timeoutSeconds * 1000));
+            const extractIpFromAnswers = (answers: Array<{ data?: string }>): string | null => {
+              for (const answer of answers) {
+                const raw = typeof answer.data === "string" ? answer.data.trim() : "";
+                const candidate = raw.replace(/\.$/, "");
+                if (candidate.length > 0 && sys.helpers.isIpAddress(candidate)) {
+                  return candidate;
+                }
+              }
+              return null;
+            };
+
+            const ipv4Result = await sys.helpers.queryNslookup(dnsTarget, "A", dnsTimeoutMs);
+            const ipv4 = ipv4Result ? extractIpFromAnswers(ipv4Result.answers) : null;
+            if (ipv4) {
+              responseHost = ipv4;
+            } else {
+              const ipv6Result = await sys.helpers.queryNslookup(dnsTarget, "AAAA", dnsTimeoutMs);
+              const ipv6 = ipv6Result ? extractIpFromAnswers(ipv6Result.answers) : null;
+              if (ipv6) {
+                responseHost = ipv6;
+              }
+            }
+          }
+
           count = sys.helpers.clamp(count, 1, 32);
           const intervalMs = Math.max(0, intervalSeconds * 1000);
           const timeoutMs = Math.max(100, timeoutSeconds * 1000);
   
           if (!quiet) {
             sys.write(
-              `PING ${resolved.label} (${resolved.host}) ${payloadSize}(${payloadSize + 28}) bytes of data.`
+              `PING ${resolved.label} (${responseHost}) ${payloadSize}(${payloadSize + 28}) bytes of data.`
             );
           }
   
@@ -183,7 +203,7 @@ export const installPing: UnixCommandInstaller = (ctx): void => {
               latencyMax = Math.max(latencyMax, probe.latencyMs);
               if (!quiet) {
                 sys.write(
-                  `${payloadSize + 8} bytes from ${resolved.host}: icmp_seq=${seq} ttl=64 time=${probe.latencyMs.toFixed(1)} ms`
+                  `${payloadSize + 8} bytes from ${responseHost}: icmp_seq=${seq} ttl=64 time=${probe.latencyMs.toFixed(1)} ms`
                 );
               }
             } else if (!quiet) {

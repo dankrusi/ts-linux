@@ -1,15 +1,11 @@
 import type { UnixCommandInstaller } from "../types";
 
 export const installHead: UnixCommandInstaller = (ctx): void => {
-  const { core, helpers } = ctx;
-  const { makeSyscallSource } = helpers;
+  const { core } = ctx;
 
   core({
     name: "head",
     description: "output the first part of files",
-    source: makeSyscallSource("head", [
-      "// runtime supports: head [-n LINES] [file ...]"
-    ]),
     run: ({ args, sys }) => {
       let lineCount = 10;
       const targets: string[] = [];

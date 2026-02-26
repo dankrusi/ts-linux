@@ -8,15 +8,11 @@ interface WcCounts {
 }
 
 export const installWc: UnixCommandInstaller = (ctx): void => {
-  const { core, helpers } = ctx;
-  const { makeSyscallSource } = helpers;
+  const { core } = ctx;
 
   core({
     name: "wc",
     description: "print newline, word, and byte counts",
-    source: makeSyscallSource("wc", [
-      "// runtime supports: wc [-lwc] [file ...]"
-    ]),
     run: ({ args, sys }) => {
       let showLines = false;
       let showWords = false;

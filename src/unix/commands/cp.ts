@@ -1,26 +1,11 @@
 import type { UnixCommandInstaller } from "../types";
 
 export const installCp: UnixCommandInstaller = (ctx): void => {
-  const { core, helpers } = ctx;
-  const { makeSyscallSource } = helpers;
+  const { core } = ctx;
 
   core({
         name: "cp",
         description: "copy files and directories",
-        source: makeSyscallSource("cp", [
-          "let recursive = false;",
-          "let noClobber = false;",
-          "let verbose = false;",
-          "const paths = [];",
-          "for (const arg of args) {",
-          "  if (arg === '-r' || arg === '-R') recursive = true;",
-          "  else if (arg === '-n') noClobber = true;",
-          "  else if (arg === '-v') verbose = true;",
-          "  else paths.push(arg);",
-          "}",
-          "if (paths.length < 2) { sys.write('cp: missing file operand'); return; }",
-          "// full runtime implementation handles recursive directory copies and mode preservation"
-        ]),
         run: ({ args, sys }) => {
           let recursive = false;
           let noClobber = false;

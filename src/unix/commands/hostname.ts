@@ -1,15 +1,11 @@
 import type { UnixCommandInstaller } from "../types";
 
 export const installHostname: UnixCommandInstaller = (ctx): void => {
-  const { core, helpers } = ctx;
-  const { makeSyscallSource } = helpers;
+  const { core } = ctx;
 
   core({
         name: "hostname",
         description: "show or set system hostname",
-        source: makeSyscallSource("hostname", [
-          "// runtime supports: hostname, hostname newname"
-        ]),
         run: ({ args, sys }) => {
           if (args.length === 0 || args[0] === "-s" || args[0] === "--short" || args[0] === "-f" || args[0] === "--fqdn") {
             sys.write(sys.runtime.host);
