@@ -11,6 +11,7 @@ const OPERATOR_GID = 1001;
 const SHELL_STORAGE_KEY = "jlinux:shell-state:v1";
 const SHELL_STATE_VERSION = 1;
 const DEFAULT_EXECUTABLE_SHEBANG = "#!/usr/bin/env jlinux";
+const GENERATED_EXECUTABLE_SHEBANG = "#!/usr/bin/node";
 const RUNTIME_SOURCE_MARKER = "// @generated-by:jlinux-runtime";
 
 const delay = (ms: number): Promise<void> => {
@@ -471,8 +472,9 @@ export interface ProgramDefinition {
   run(context: ProgramContext): Promise<void> | void;
 }
 
-export interface ExecutableProgramDefinition extends ProgramDefinition {
+export interface ExecutableProgramDefinition extends Omit<ProgramDefinition, "run"> {
   path: string;
+  run?: ProgramDefinition["run"];
   source?: string;
 }
 
@@ -511,6 +513,8 @@ export interface ShellBridge {
   clear(): void;
   runTui(program: TuiProgram): Promise<void>;
   readSecret(prompt: string): Promise<string | null>;
+  readClipboardText(): Promise<string | null>;
+  writeClipboardText(text: string): Promise<boolean>;
   disconnect(message?: string): void;
 }
 
@@ -1016,6 +1020,7 @@ const filenameFromUrl = (rawUrl: string): string => {
 export class Shell {
   private readonly fs = new VirtualFS(HOME_PATH);
   private readonly executables = new Map<string, ProgramDefinition>();
+  private readonly executableSeedSources = new Map<string, string>();
   private readonly sourceProgramCache = new Map<string, { source: string; program: ProgramDefinition }>();
   private readonly users = new Map<string, VirtualUser>();
   private readonly pathDirs = ["/bin", "/usr/bin", "/usr/local/bin"];
@@ -1070,7 +1075,8 @@ export class Shell {
     const user = this.getActiveUser();
     const cwd = this.fs.pwd();
     const prettyCwd = cwd.startsWith(user.home) ? `~${cwd.slice(user.home.length) || ""}` : cwd;
-    return `${user.username}@${this.host}:${prettyCwd}$ `;
+    const promptChar = user.uid === ROOT_UID ? "#" : "$";
+    return `${user.username}@${this.host}:${prettyCwd}${promptChar} `;
   }
 
   public getSystemConfig(): ShellSystemConfig {
@@ -1104,11 +1110,33 @@ export class Shell {
 
     this.withUserFsCredentials(this.getRootUser(), () => {
       const absolutePath = this.fs.toAbsolute(program.path);
+      const commandName = this.commandNameFromPath(absolutePath);
+      let runtimeRun = program.run;
+
+      if (!runtimeRun) {
+        const source = typeof program.source === "string" ? program.source : "";
+        if (source.length === 0) {
+          throw new Error(`registerExecutable: '${absolutePath}' requires either run or source`);
+        }
+
+        const compileResult = this.compileSourceEntryPoint(absolutePath, source);
+        if (compileResult === null) {
+          throw new Error(`registerExecutable: source at '${absolutePath}' is not executable JavaScript`);
+        }
+        if (!compileResult.ok) {
+          throw new Error(`registerExecutable: ${compileResult.error}`);
+        }
+        runtimeRun = compileResult.run;
+        this.executableSeedSources.set(absolutePath, source);
+      } else {
+        this.executableSeedSources.delete(absolutePath);
+      }
+
       this.executables.set(absolutePath, {
-        name: this.commandNameFromPath(absolutePath),
+        name: commandName,
         description: program.description,
         showInHelp: program.showInHelp,
-        run: program.run
+        run: runtimeRun
       });
       this.sourceProgramCache.delete(absolutePath);
 
@@ -1154,7 +1182,9 @@ export class Shell {
       return { ok: false, error: `load: missing runtime executable for ${path}` };
     }
 
-    const desiredSource = this.buildRuntimeExecutableSource(path, program);
+    const seededSource = this.executableSeedSources.get(path);
+    const desiredSource =
+      typeof seededSource === "string" ? seededSource : this.buildRuntimeExecutableSource(path, program);
     const stat = this.fs.stat(path);
 
     if (stat?.kind === "dir") {
@@ -1216,22 +1246,60 @@ export class Shell {
     program: ProgramDefinition,
     runSource: string
   ): string {
+    const mainSource = this.renderSimplifiedMainSource(runSource);
     return [
-      DEFAULT_EXECUTABLE_SHEBANG,
+      GENERATED_EXECUTABLE_SHEBANG,
       RUNTIME_SOURCE_MARKER,
       `// path: ${path}`,
       `// command: ${program.name}`,
       `// description: ${program.description}`,
-      "export default async function main(ctx) {",
-      "  const args = Array.isArray(ctx?.args) ? ctx.args : [];",
-      "  const sys = ctx?.sys;",
-      "  if (!sys) {",
-      "    throw new Error(\"runtime sys context is unavailable\");",
-      "  }",
-      `  const __run = ${runSource};`,
-      "  await __run({ args, sys, ctx });",
+      mainSource
+    ].join("\n");
+  }
+
+  private renderSimplifiedMainSource(runSource: string): string {
+    const simplified = this.tryRenderMainFunctionFromRun(runSource);
+    if (simplified) {
+      return simplified;
+    }
+    return `const main = ${runSource};`;
+  }
+
+  private tryRenderMainFunctionFromRun(runSource: string): string | null {
+    const source = this.stripOuterFunctionExpressionParens(runSource);
+    const asyncArrowMatch = source.match(
+      /^async\s*\(\s*\{\s*args\s*,\s*sys(?:\s*,\s*ctx)?\s*\}\s*\)\s*=>\s*\{([\s\S]*)\}$/
+    );
+    const syncArrowMatch = source.match(
+      /^\(\s*\{\s*args\s*,\s*sys(?:\s*,\s*ctx)?\s*\}\s*\)\s*=>\s*\{([\s\S]*)\}$/
+    );
+    const body = asyncArrowMatch?.[1] ?? syncArrowMatch?.[1];
+    if (typeof body !== "string") {
+      return null;
+    }
+
+    const trimmedBody = body.replace(/^\s*\n/, "").replace(/\n\s*$/, "");
+    if (trimmedBody.length === 0) {
+      return "async function main({ args, sys }) {}";
+    }
+
+    return [
+      "async function main({ args, sys }) {",
+      trimmedBody,
       "}"
     ].join("\n");
+  }
+
+  private stripOuterFunctionExpressionParens(source: string): string {
+    let value = source.trim();
+    while (value.startsWith("(") && value.endsWith(")")) {
+      const inner = value.slice(1, -1).trim();
+      if (!this.canCompileFunctionExpression(inner)) {
+        break;
+      }
+      value = inner;
+    }
+    return value;
   }
 
   private buildRuntimeBridgeRunSource(path: string): string {
@@ -1279,30 +1347,8 @@ export class Shell {
   }
 
   private canCompileExecutableSource(source: string): boolean {
-    const sourceBody = source.replace(/^#![^\r\n]*(?:\r?\n)?/, "");
-    const transformedSource = sourceBody.replace(/\bexport\s+default\b/, "__jlinuxDefault =");
-    const factorySource = [
-      "\"use strict\";",
-      "let __jlinuxDefault;",
-      "const module = { exports: {} };",
-      "const exports = module.exports;",
-      transformedSource,
-      "const resolvedEntryPoint =",
-      "  (typeof __jlinuxDefault === 'function' && __jlinuxDefault) ||",
-      "  (typeof module.exports === 'function' && module.exports) ||",
-      "  (module.exports && typeof module.exports.default === 'function' && module.exports.default) ||",
-      "  (typeof exports.default === 'function' && exports.default) ||",
-      "  null;",
-      "return resolvedEntryPoint;"
-    ].join("\n");
-
-    try {
-      const sourceFactory = new Function(factorySource) as () => unknown;
-      const loaded = sourceFactory();
-      return typeof loaded === "function";
-    } catch {
-      return false;
-    }
+    const compileResult = this.compileSourceEntryPoint("<generated>", source);
+    return compileResult !== null && compileResult.ok;
   }
 
   private normalizeFunctionExpression(source: string): string {
@@ -2172,7 +2218,83 @@ export class Shell {
       }
     }
 
-    return { error: `${command}: command not found` };
+    const suggestions = this.suggestCommands(command);
+    if (suggestions.length === 0) {
+      return { error: `${command}: command not found` };
+    }
+    if (suggestions.length === 1) {
+      return { error: `${command}: command not found. did you mean '${suggestions[0]}'?` };
+    }
+    return {
+      error: `${command}: command not found. did you mean one of: ${suggestions
+        .map((name) => `'${name}'`)
+        .join(", ")}?`
+    };
+  }
+
+  private suggestCommands(command: string): string[] {
+    const needle = command.trim().toLowerCase();
+    if (needle.length < 2) {
+      return [];
+    }
+
+    const commands = this.listCommands();
+    const prefixMatches = commands.filter((name) => name.toLowerCase().startsWith(needle)).slice(0, 3);
+    if (prefixMatches.length > 0) {
+      return prefixMatches;
+    }
+
+    const containsMatches = commands.filter((name) => name.toLowerCase().includes(needle)).slice(0, 3);
+    if (containsMatches.length > 0) {
+      return containsMatches;
+    }
+
+    const ranked = commands
+      .map((name) => ({
+        name,
+        distance: this.levenshteinDistance(needle, name.toLowerCase())
+      }))
+      .filter((entry) => entry.distance <= 2)
+      .sort((a, b) => a.distance - b.distance || a.name.localeCompare(b.name))
+      .slice(0, 3);
+
+    return ranked.map((entry) => entry.name);
+  }
+
+  private levenshteinDistance(a: string, b: string): number {
+    if (a === b) {
+      return 0;
+    }
+    if (a.length === 0) {
+      return b.length;
+    }
+    if (b.length === 0) {
+      return a.length;
+    }
+
+    const previous = new Array<number>(b.length + 1);
+    const current = new Array<number>(b.length + 1);
+
+    for (let j = 0; j <= b.length; j += 1) {
+      previous[j] = j;
+    }
+
+    for (let i = 1; i <= a.length; i += 1) {
+      current[0] = i;
+      for (let j = 1; j <= b.length; j += 1) {
+        const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+        const deletion = (previous[j] ?? 0) + 1;
+        const insertion = (current[j - 1] ?? 0) + 1;
+        const substitution = (previous[j - 1] ?? 0) + cost;
+        current[j] = Math.min(deletion, insertion, substitution);
+      }
+
+      for (let j = 0; j <= b.length; j += 1) {
+        previous[j] = current[j] ?? 0;
+      }
+    }
+
+    return previous[b.length] ?? 0;
   }
 
   private resolveAllExecutables(command: string): string[] {
@@ -2641,14 +2763,17 @@ export class Shell {
     let dirty = false;
     let status =
       flavor === "nano"
-        ? "Ctrl+O write   Ctrl+X exit   Ctrl+C cancel"
+        ? "Ctrl+O write   Ctrl+X exit   Ctrl+Shift+C copy   Ctrl+Shift+V paste"
         : "-- NORMAL --   i insert   :w :q :wq";
     let statusIsError = false;
     let nanoQuitArmed = false;
     let viMode: "normal" | "insert" | "command" = flavor === "nano" ? "insert" : "normal";
     let viCommand = "";
     let pendingDelete = false;
+    let pendingYank = false;
+    let editorClipboard = "";
     let closed = false;
+    let requestRedraw: (() => void) | null = null;
 
     const markDirty = (): void => {
       dirty = true;
@@ -2762,6 +2887,81 @@ export class Shell {
       cursorCol = 0;
       preferredCol = 0;
       markDirty();
+    };
+
+    const insertTextBlock = (textValue: string): void => {
+      const normalized = textValue.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+      if (normalized.length === 0) {
+        return;
+      }
+
+      const chunks = normalized.split("\n");
+      insertText(chunks[0] ?? "");
+      for (let i = 1; i < chunks.length; i += 1) {
+        insertNewLine();
+        insertText(chunks[i] ?? "");
+      }
+    };
+
+    const copyToClipboard = (textValue: string, message: string): void => {
+      editorClipboard = textValue;
+      void this.bridge.writeClipboardText(textValue);
+      setStatus(message);
+    };
+
+    const copyCurrentLine = (linewise: boolean, message: string): void => {
+      const payload = `${currentLine()}${linewise ? "\n" : ""}`;
+      copyToClipboard(payload, message);
+    };
+
+    const pasteText = (textValue: string, options?: { afterCursor?: boolean; linewise?: boolean }): void => {
+      const normalized = textValue.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+      if (normalized.length === 0) {
+        return;
+      }
+
+      const isLinewise = options?.linewise ?? normalized.endsWith("\n");
+      if (isLinewise) {
+        const body = normalized.endsWith("\n") ? normalized.slice(0, -1) : normalized;
+        const insertLines = body.length > 0 ? body.split("\n") : [""];
+        lines.splice(cursorRow + 1, 0, ...insertLines);
+        cursorRow = clamp(cursorRow + 1, 0, Math.max(0, lines.length - 1));
+        cursorCol = 0;
+        preferredCol = 0;
+        markDirty();
+        return;
+      }
+
+      if (options?.afterCursor && cursorCol < currentLine().length) {
+        cursorCol += 1;
+        preferredCol = cursorCol;
+      }
+      insertTextBlock(normalized);
+    };
+
+    const pasteFromClipboard = (options?: { afterCursor?: boolean; linewise?: boolean }): void => {
+      void this.bridge.readClipboardText().then((clipboardText) => {
+        if (closed) {
+          return;
+        }
+
+        const textValue =
+          typeof clipboardText === "string" && clipboardText.length > 0
+            ? clipboardText
+            : editorClipboard;
+        if (!textValue || textValue.length === 0) {
+          setStatus("clipboard is empty", true);
+          requestRedraw?.();
+          return;
+        }
+
+        nanoQuitArmed = false;
+        pendingDelete = false;
+        pendingYank = false;
+        pasteText(textValue, options);
+        setStatus(`[pasted ${textValue.length} byte${textValue.length === 1 ? "" : "s"}]`);
+        requestRedraw?.();
+      });
     };
 
     const backspace = (): void => {
@@ -2960,10 +3160,10 @@ export class Shell {
         if (!(flavor === "vi" && viMode === "command")) {
           const hint =
             flavor === "nano"
-              ? "^O WriteOut  ^X Exit  Arrows Move"
+              ? "^O WriteOut  ^X Exit  ^Shift+C Copy  ^Shift+V Paste"
               : viMode === "insert"
-                ? "-- INSERT --  Esc normal  Ctrl+S write"
-                : "-- NORMAL --  i insert  :w :q :wq";
+                ? "-- INSERT --  Esc normal  Ctrl+S write  Shift+V paste"
+                : "-- NORMAL --  i/a/o insert  yy yank  p paste  :w :q :wq";
           ui.text(1, layout.commandY, hint, {
             width: Math.max(1, ui.width - 2),
             ellipsis: true,
@@ -2973,6 +3173,7 @@ export class Shell {
 
         ui.render();
       };
+      requestRedraw = draw;
 
       const executeViCommand = (): void => {
         const command = viCommand.trim();
@@ -3035,7 +3236,7 @@ export class Shell {
         setStatus(`${commandName}: not an editor command: ${command}`, true);
       };
 
-      const handleInsertLikeKey = (key: { key: string; ctrl: boolean; alt: boolean }): void => {
+      const handleInsertLikeKey = (key: { key: string; ctrl: boolean; meta: boolean; alt: boolean }): void => {
         if (key.key === "ArrowLeft") {
           moveHorizontal(-1);
           return;
@@ -3086,13 +3287,64 @@ export class Shell {
           insertText("  ");
           return;
         }
-        if (key.key.length === 1 && !key.ctrl && !key.alt) {
+        if (key.key.length === 1 && !key.ctrl && !key.meta && !key.alt) {
           insertText(key.key);
         }
       };
 
+      ui.onPaste((text) => {
+        if (closed) {
+          return;
+        }
+
+        const pasted = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+        if (pasted.length === 0) {
+          return;
+        }
+
+        editorClipboard = pasted;
+        pendingDelete = false;
+        pendingYank = false;
+        nanoQuitArmed = false;
+
+        if (flavor === "vi" && viMode === "command") {
+          viCommand += pasted.replace(/\n/g, "");
+        } else {
+          pasteText(pasted, {
+            afterCursor: flavor === "vi" && viMode === "normal"
+          });
+          setStatus(`[pasted ${pasted.length} byte${pasted.length === 1 ? "" : "s"}]`);
+        }
+
+        draw();
+      });
+
       ui.onKey((key) => {
         const lower = key.key.toLowerCase();
+        const copyShortcut = key.shift && (key.ctrl || key.meta) && lower === "c";
+        const pasteShortcut =
+          (key.shift && (key.ctrl || key.meta) && lower === "v") ||
+          (key.shift && key.key === "Insert");
+
+        if (copyShortcut) {
+          if (flavor === "vi" && viMode === "normal") {
+            copyCurrentLine(true, "1 line yanked");
+          } else {
+            copyCurrentLine(false, `[copied ${currentLine().length} byte${currentLine().length === 1 ? "" : "s"}]`);
+          }
+          if (!closed) {
+            draw();
+          }
+          return;
+        }
+
+        if (pasteShortcut) {
+          pasteFromClipboard({
+            afterCursor: flavor === "vi" && viMode === "normal"
+          });
+          return;
+        }
+
         if (key.ctrl && lower === "c") {
           closeEditor(ui);
           return;
@@ -3124,12 +3376,14 @@ export class Shell {
           if (key.key === "Escape") {
             viMode = "normal";
             viCommand = "";
+            pendingDelete = false;
+            pendingYank = false;
             setStatus("-- NORMAL --   i insert   :w :q :wq");
           } else if (key.key === "Enter") {
             executeViCommand();
           } else if (key.key === "Backspace") {
             viCommand = viCommand.slice(0, -1);
-          } else if (key.key.length === 1 && !key.ctrl && !key.alt) {
+          } else if (key.key.length === 1 && !key.ctrl && !key.meta && !key.alt) {
             viCommand += key.key;
           }
 
@@ -3143,6 +3397,7 @@ export class Shell {
           if (key.key === "Escape") {
             viMode = "normal";
             pendingDelete = false;
+            pendingYank = false;
             setStatus("-- NORMAL --   i insert   :w :q :wq");
           } else if (key.ctrl && lower === "s") {
             saveBuffer();
@@ -3154,6 +3409,10 @@ export class Shell {
             draw();
           }
           return;
+        }
+
+        if (key.key !== "y") {
+          pendingYank = false;
         }
 
         if (key.key === ":") {
@@ -3187,11 +3446,29 @@ export class Shell {
           deleteForward();
         } else if (key.key === "d") {
           if (pendingDelete) {
+            copyCurrentLine(true, "1 line deleted");
             deleteCurrentLine();
             pendingDelete = false;
           } else {
             pendingDelete = true;
             setStatus("d");
+          }
+        } else if (key.key === "y") {
+          pendingDelete = false;
+          if (pendingYank) {
+            copyCurrentLine(true, "1 line yanked");
+            pendingYank = false;
+          } else {
+            pendingYank = true;
+            setStatus("y");
+          }
+        } else if (key.key === "p") {
+          pendingDelete = false;
+          pasteText(editorClipboard, { afterCursor: true });
+          if (editorClipboard.length > 0) {
+            setStatus(`[pasted ${editorClipboard.length} byte${editorClipboard.length === 1 ? "" : "s"}]`);
+          } else {
+            setStatus("clipboard is empty", true);
           }
         } else if (key.key === "h" || key.key === "ArrowLeft") {
           pendingDelete = false;
@@ -3310,15 +3587,48 @@ export class Shell {
       };
     }
 
+    const compileResult = this.compileSourceEntryPoint(path, source);
+    if (compileResult === null) {
+      this.sourceProgramCache.delete(path);
+      return null;
+    }
+    if (!compileResult.ok) {
+      this.sourceProgramCache.delete(path);
+      return {
+        ok: false,
+        error: compileResult.error
+      };
+    }
+
+    const loadedProgram: ProgramDefinition = {
+      name: commandName,
+      description: `script loaded from ${path}`,
+      run: compileResult.run
+    };
+
+    this.sourceProgramCache.set(path, {
+      source,
+      program: loadedProgram
+    });
+    return { ok: true, program: loadedProgram };
+  }
+
+  private compileSourceEntryPoint(
+    path: string,
+    source: string
+  ): { ok: true; run: ProgramDefinition["run"] } | { ok: false; error: string } | null {
     const sourceBody = source.replace(/^#![^\r\n]*(?:\r?\n)?/, "");
     const looksLikeJavaScript =
+      source.startsWith(GENERATED_EXECUTABLE_SHEBANG) ||
       source.startsWith(DEFAULT_EXECUTABLE_SHEBANG) ||
+      source.includes(RUNTIME_SOURCE_MARKER) ||
       /\bexport\s+default\b/.test(sourceBody) ||
       /\bmodule\.exports\b/.test(sourceBody) ||
-      /\bexports\.default\b/.test(sourceBody);
+      /\bexports\.default\b/.test(sourceBody) ||
+      /\b(?:async\s+)?function\s+main\s*\(/.test(sourceBody) ||
+      /\bconst\s+main\s*=/.test(sourceBody);
 
     if (!looksLikeJavaScript) {
-      this.sourceProgramCache.delete(path);
       return null;
     }
 
@@ -3331,6 +3641,7 @@ export class Shell {
       transformedSource,
       "const resolvedEntryPoint =",
       "  (typeof __jlinuxDefault === 'function' && __jlinuxDefault) ||",
+      "  (typeof main === 'function' && main) ||",
       "  (typeof module.exports === 'function' && module.exports) ||",
       "  (module.exports && typeof module.exports.default === 'function' && module.exports.default) ||",
       "  (typeof exports.default === 'function' && exports.default) ||",
@@ -3338,41 +3649,28 @@ export class Shell {
       "return resolvedEntryPoint;"
     ].join("\n");
 
-    let entryPoint: ProgramDefinition["run"];
     try {
       const sourceFactory = new Function(factorySource) as () => unknown;
       const loaded = sourceFactory();
       if (typeof loaded !== "function") {
         return {
           ok: false,
-          error: "executable source did not export a default function"
+          error: "executable source did not define a callable entrypoint"
         };
       }
 
       const runtimeEntryPoint = loaded as ProgramDefinition["run"];
-      entryPoint = async (context) => {
+      const run: ProgramDefinition["run"] = async (context) => {
         await runtimeEntryPoint(context);
       };
+      return { ok: true, run };
     } catch (error) {
-      this.sourceProgramCache.delete(path);
       const message = error instanceof Error ? error.message : String(error);
       return {
         ok: false,
         error: `unable to compile executable source at ${path} (${message})`
       };
     }
-
-    const loadedProgram: ProgramDefinition = {
-      name: commandName,
-      description: `script loaded from ${path}`,
-      run: entryPoint
-    };
-
-    this.sourceProgramCache.set(path, {
-      source,
-      program: loadedProgram
-    });
-    return { ok: true, program: loadedProgram };
   }
 
 }

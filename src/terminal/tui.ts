@@ -151,6 +151,7 @@ const makeTableRow = (cellsText: string[], widths: number[], aligns: TextAlign[]
 export interface TuiKey {
   key: string;
   ctrl: boolean;
+  meta: boolean;
   alt: boolean;
   shift: boolean;
 }
@@ -294,6 +295,7 @@ export interface TuiContext {
   table(options: TableOptions): void;
   render(): void;
   onKey(handler: (key: TuiKey) => void): () => void;
+  onPaste(handler: (text: string) => void): () => void;
   interval(ms: number, callback: () => void): () => void;
   timeout(ms: number, callback: () => void): () => void;
   exit(message?: string): void;

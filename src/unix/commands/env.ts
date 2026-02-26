@@ -24,7 +24,11 @@ export const installEnv: UnixCommandInstaller = (ctx): void => {
   
           const applyAssignment = (assignment: string): boolean => {
             const index = assignment.indexOf("=");
-            if (index <= 0) {
+            if (index < 0) {
+              return false;
+            }
+            if (index === 0) {
+              sys.write(`env: '${assignment}': invalid variable name`);
               return false;
             }
             const name = assignment.slice(0, index);

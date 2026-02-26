@@ -20,6 +20,7 @@ export const installSu: UnixCommandInstaller = (ctx): void => {
           let targetName = "root";
           let targetAssigned = false;
           let password: string | undefined;
+          let readPasswordFromStdin = false;
           let commandArgs: string[] = [];
           let parsingOptions = true;
   
@@ -47,7 +48,7 @@ export const installSu: UnixCommandInstaller = (ctx): void => {
               continue;
             }
   
-            if (parsingOptions && (arg === "--password" || arg === "--password-stdin")) {
+            if (parsingOptions && arg === "--password") {
               const value = args[i + 1];
               if (!value) {
                 sys.write(`su: option '${arg}' requires an argument`);
@@ -55,6 +56,11 @@ export const installSu: UnixCommandInstaller = (ctx): void => {
               }
               password = value;
               i += 1;
+              continue;
+            }
+
+            if (parsingOptions && arg === "--password-stdin") {
+              readPasswordFromStdin = true;
               continue;
             }
   
@@ -102,7 +108,10 @@ export const installSu: UnixCommandInstaller = (ctx): void => {
           const requiresPassword = actor.uid !== 0 && actor.username !== target.username;
           if (requiresPassword) {
             const stdinPassword = sys.process.stdin.replace(/\r\n/g, "\n").split("\n")[0]?.trim() ?? "";
-            let suppliedPassword = password ?? (stdinPassword.length > 0 ? stdinPassword : undefined);
+            let suppliedPassword = password;
+            if (!suppliedPassword && readPasswordFromStdin) {
+              suppliedPassword = stdinPassword.length > 0 ? stdinPassword : undefined;
+            }
             if (!suppliedPassword) {
               const entered = await sys.runtime.bridge.readSecret("Password: ");
               suppliedPassword = entered !== null ? entered : undefined;

@@ -24,6 +24,7 @@ import {
 interface TuiSession {
   buffer: FrameBuffer;
   keyHandlers: Set<(key: TuiKey) => void>;
+  pasteHandlers: Set<(text: string) => void>;
   timers: Set<number>;
   resolve: () => void;
   exitMessage?: string;
@@ -85,6 +86,7 @@ export class BrowserTerminal implements ShellBridge {
   private tuiSession: TuiSession | null = null;
   private tabCycle: TabCycleState | null = null;
   private secretPrompt: SecretPromptSession | null = null;
+  private clipboardBuffer = "";
 
   constructor(container: HTMLElement, options?: BrowserTerminalOptions) {
     this.root = document.createElement("div");
@@ -121,6 +123,9 @@ export class BrowserTerminal implements ShellBridge {
 
     this.body.addEventListener("keydown", (event) => {
       this.handleKeyDown(event);
+    });
+    this.body.addEventListener("paste", (event) => {
+      this.handlePaste(event);
     });
 
     this.root.addEventListener("click", () => {
@@ -228,6 +233,35 @@ export class BrowserTerminal implements ShellBridge {
     }
   }
 
+  public async readClipboardText(): Promise<string | null> {
+    if (navigator.clipboard && typeof navigator.clipboard.readText === "function") {
+      try {
+        const text = await navigator.clipboard.readText();
+        this.clipboardBuffer = text;
+        return text;
+      } catch {
+        // Fall back to the in-memory buffer when clipboard permissions are unavailable.
+      }
+    }
+
+    return this.clipboardBuffer.length > 0 ? this.clipboardBuffer : null;
+  }
+
+  public async writeClipboardText(text: string): Promise<boolean> {
+    this.clipboardBuffer = text;
+
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+      try {
+        await navigator.clipboard.writeText(text);
+        return true;
+      } catch {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
   public async readSecret(prompt: string): Promise<string | null> {
     if (!this.connected || this.mode !== "shell") {
       return null;
@@ -273,6 +307,7 @@ export class BrowserTerminal implements ShellBridge {
       const session: TuiSession = {
         buffer,
         keyHandlers: new Set<(key: TuiKey) => void>(),
+        pasteHandlers: new Set<(text: string) => void>(),
         timers: new Set<number>(),
         resolve
       };
@@ -353,6 +388,12 @@ export class BrowserTerminal implements ShellBridge {
             session.keyHandlers.delete(handler);
           };
         },
+        onPaste: (handler: (text: string) => void) => {
+          session.pasteHandlers.add(handler);
+          return () => {
+            session.pasteHandlers.delete(handler);
+          };
+        },
         interval: (ms: number, callback: () => void) => {
           const id = window.setInterval(callback, ms);
           session.timers.add(id);
@@ -413,6 +454,7 @@ export class BrowserTerminal implements ShellBridge {
     }
     session.timers.clear();
     session.keyHandlers.clear();
+    session.pasteHandlers.clear();
 
     this.tuiSession = null;
     this.mode = "shell";
@@ -572,10 +614,18 @@ export class BrowserTerminal implements ShellBridge {
       return;
     }
 
+    const lower = event.key.toLowerCase();
+    const isPasteShortcut =
+      (event.shiftKey && event.key === "Insert") || ((event.ctrlKey || event.metaKey) && lower === "v");
+    if (isPasteShortcut) {
+      return;
+    }
+
     event.preventDefault();
     const key: TuiKey = {
       key: event.key,
       ctrl: event.ctrlKey,
+      meta: event.metaKey,
       alt: event.altKey,
       shift: event.shiftKey
     };
@@ -583,6 +633,42 @@ export class BrowserTerminal implements ShellBridge {
     for (const handler of session.keyHandlers) {
       handler(key);
     }
+  }
+
+  private handlePaste(event: ClipboardEvent): void {
+    const text = event.clipboardData?.getData("text/plain") ?? "";
+    if (text.length === 0) {
+      return;
+    }
+
+    this.clipboardBuffer = text;
+
+    if (this.mode === "tui") {
+      const session = this.tuiSession;
+      if (!session) {
+        return;
+      }
+
+      event.preventDefault();
+      for (const handler of session.pasteHandlers) {
+        handler(text);
+      }
+      return;
+    }
+
+    if (!this.connected) {
+      return;
+    }
+
+    if (this.mode !== "shell" || this.busy) {
+      return;
+    }
+
+    event.preventDefault();
+    this.inputBuffer =
+      this.inputBuffer.slice(0, this.cursor) + text + this.inputBuffer.slice(this.cursor);
+    this.cursor += text.length;
+    this.renderInput();
   }
 
   private handleSecretPromptKeyDown(event: KeyboardEvent): void {

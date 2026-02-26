@@ -524,12 +524,7 @@ export class VirtualFS {
 
     const items = Object.entries(node.entries)
       .map(([name, child]) => ({ name, node: child }))
-      .sort((a, b) => {
-        if (a.node.kind === b.node.kind) {
-          return a.name.localeCompare(b.name);
-        }
-        return a.node.kind === "dir" ? -1 : 1;
-      });
+      .sort((a, b) => a.name.localeCompare(b.name));
 
     return { items, singleFile: false };
   }
@@ -617,9 +612,14 @@ export class VirtualFS {
   }
 
   public resolve(path: string): string[] {
-    const safePath = path.trim();
+    let safePath = path.trim();
     if (safePath.length === 0) {
       return [...this.cwd];
+    }
+
+    if (safePath === "~" || safePath.startsWith("~/")) {
+      const home = this.resolveHomePathForCurrentUser();
+      safePath = safePath === "~" ? home : `${home}/${safePath.slice(2)}`;
     }
 
     const segments = safePath.split("/");
@@ -640,6 +640,26 @@ export class VirtualFS {
     }
 
     return resolved;
+  }
+
+  private resolveHomePathForCurrentUser(): string {
+    if (this.currentUid === ROOT_UID) {
+      const rootHome = this.getNodeUnchecked(["root"]);
+      if (rootHome && rootHome.kind === "dir") {
+        return "/root";
+      }
+    }
+
+    const homeRoot = this.getNodeUnchecked(["home"]);
+    if (homeRoot && homeRoot.kind === "dir") {
+      for (const [name, node] of Object.entries(homeRoot.entries)) {
+        if (node.kind === "dir" && node.owner === this.currentUid) {
+          return `/home/${name}`;
+        }
+      }
+    }
+
+    return this.currentUid === ROOT_UID ? "/root" : "/home/guest";
   }
 
   private toPath(parts: string[]): string {

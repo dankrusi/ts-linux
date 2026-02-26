@@ -93,6 +93,11 @@ terminal.registerExecutable({
 });
 ```
 
+`registerExecutable` accepts either:
+
+- `run` (preferred): runtime function is used and executable source is generated from `run.toString()`
+- `source` without `run`: source file becomes the executable definition and is compiled/loaded directly
+
 ## Tool `run` contract
 
 All built-in tools and custom apps use a single signature:

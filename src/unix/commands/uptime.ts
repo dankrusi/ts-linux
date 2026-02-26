@@ -9,14 +9,41 @@ export const installUptime: UnixCommandInstaller = (ctx): void => {
         description: "show how long the system has been running",
         source: makeSyscallSource("uptime", ["sys.write('up ...');"]),
         run: ({ args, sys }) => {
-          if (args.some((arg) => arg.startsWith("-") && arg !== "-p" && arg !== "--pretty")) {
-            sys.write(`uptime: invalid option -- '${args[0] ?? ""}'`);
+          let prettyOnly = false;
+          let since = false;
+
+          for (const arg of args) {
+            if (arg === "-p" || arg === "--pretty") {
+              prettyOnly = true;
+              continue;
+            }
+            if (arg === "-s" || arg === "--since") {
+              since = true;
+              continue;
+            }
+            if (arg.startsWith("-")) {
+              sys.write(`uptime: invalid option -- '${arg}'`);
+              return;
+            }
+            sys.write(`uptime: extra operand '${arg}'`);
             return;
           }
-  
+
           const now = sys.now();
           const uptimeSeconds = sys.helpers.shellUptimeSeconds();
           const pretty = sys.helpers.formatDurationCompact(uptimeSeconds);
+
+          if (since) {
+            const bootAt = new Date(now.getTime() - uptimeSeconds * 1000);
+            sys.write(bootAt.toISOString().replace("T", " ").slice(0, 19));
+            return;
+          }
+
+          if (prettyOnly) {
+            sys.write(`up ${pretty}`);
+            return;
+          }
+
           const usersOnline = 1;
           const base = uptimeSeconds / 300;
           const load1 = sys.helpers.clamp(0.12 + Math.sin(base) * 0.1 + Math.random() * 0.05, 0, 4);
